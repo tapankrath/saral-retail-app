@@ -71,6 +71,7 @@ export function AuthProvider({ children }) {
       p_contact_email: fields.contactEmail || null,
       p_city: fields.city || null,
       p_state: fields.state || null,
+      p_recovery_pin: fields.recoveryPin || null,
     })
     if (signupError) {
       return { error: signupError.message }
@@ -90,6 +91,36 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     await supabase.auth.signOut()
+  }
+
+  // Self-service "forgot password" — since login accounts use synthetic,
+  // non-deliverable email addresses under the hood, Supabase's normal
+  // email-link reset can't be used. Instead each person can set a 6-digit
+  // recovery PIN and use it (together with their login name + org code) to
+  // set a brand-new password without needing to be signed in.
+  async function resetPasswordWithPin(loginName, orgShortCode, pin, newPassword) {
+    const { error } = await supabase.rpc('reset_password_with_pin', {
+      p_login_name: loginName,
+      p_org_short_code: orgShortCode,
+      p_recovery_pin: pin,
+      p_new_password: newPassword,
+    })
+    if (error) {
+      return { error: 'That login, organization code, or recovery PIN was not recognized.' }
+    }
+    return { error: null }
+  }
+
+  async function setMyRecoveryPin(pin) {
+    const { error } = await supabase.rpc('set_my_recovery_pin', { p_recovery_pin: pin })
+    if (error) return { error: error.message }
+    return { error: null }
+  }
+
+  async function changeMyPassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) return { error: error.message }
+    return { error: null }
   }
 
   function moduleLevel(code) {
@@ -113,6 +144,9 @@ export function AuthProvider({ children }) {
     loading: session === undefined || (session && !permissions),
     loginWithLoginNameAndOrg,
     signUpOrganization,
+    resetPasswordWithPin,
+    setMyRecoveryPin,
+    changeMyPassword,
     logout,
     moduleLevel,
     canView,
