@@ -3,8 +3,7 @@ import { useAuth } from '../lib/AuthContext'
 
 export default function Login() {
   const { loginWithLoginNameAndOrg } = useAuth()
-  const [loginName, setLoginName] = useState('')
-  const [orgCode, setOrgCode] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -12,8 +11,18 @@ export default function Login() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
+
+    const raw = identifier.trim()
+    const atIndex = raw.indexOf('@')
+    if (atIndex <= 0 || atIndex === raw.length - 1) {
+      setError('Enter your login as loginname@orgcode, e.g. rina@demo1')
+      return
+    }
+    const loginName = raw.slice(0, atIndex)
+    const orgCode = raw.slice(atIndex + 1)
+
     setBusy(true)
-    const { error } = await loginWithLoginNameAndOrg(loginName.trim(), orgCode.trim(), password)
+    const { error } = await loginWithLoginNameAndOrg(loginName, orgCode, password)
     setBusy(false)
     if (error) setError(error)
   }
@@ -32,25 +41,15 @@ export default function Login() {
 
         <form onSubmit={handleSubmit}>
           <div className="login-field">
-            <label htmlFor="login-name">Login</label>
-            <div className="login-id-row">
-              <input
-                id="login-name"
-                autoComplete="username"
-                placeholder="login name"
-                value={loginName}
-                onChange={(e) => setLoginName(e.target.value)}
-                required
-              />
-              <span>@</span>
-              <input
-                id="org-code"
-                placeholder="org code"
-                value={orgCode}
-                onChange={(e) => setOrgCode(e.target.value)}
-                required
-              />
-            </div>
+            <label htmlFor="identifier">Login</label>
+            <input
+              id="identifier"
+              autoComplete="username"
+              placeholder="loginname@orgcode"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              required
+            />
           </div>
           <div className="login-field">
             <label htmlFor="password">Password</label>
