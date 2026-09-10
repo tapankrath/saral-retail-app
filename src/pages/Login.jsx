@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../lib/AuthContext'
 
-export default function Login({ onSignUp }) {
+export default function Login({ onSignUp, onForgot }) {
   const { loginWithLoginNameAndOrg } = useAuth()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -66,6 +66,12 @@ export default function Login({ onSignUp }) {
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        <p className="login-hint" style={{ textAlign: 'center' }}>
+          <a href="#" onClick={(e) => { e.preventDefault(); onForgot() }} style={{ color: 'var(--accent)', fontWeight: 600 }}>
+            Forgot password?
+          </a>
+        </p>
 
         <p className="login-hint">
           Demo login: <strong>rina@demo1</strong> (owner, full access) or{' '}

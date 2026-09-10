@@ -25,6 +25,7 @@ export default function SignUp({ onBack }) {
   const [contactEmail, setContactEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [recoveryPin, setRecoveryPin] = useState('')
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -70,6 +71,10 @@ export default function SignUp({ onBack }) {
       setError('That organization code is already taken — please choose another.')
       return
     }
+    if (recoveryPin && !/^\d{6}$/.test(recoveryPin)) {
+      setError('Recovery PIN must be exactly 6 digits, or leave it blank.')
+      return
+    }
 
     setBusy(true)
     const { error: signupError } = await signUpOrganization({
@@ -82,6 +87,7 @@ export default function SignUp({ onBack }) {
       contactEmail,
       city,
       state,
+      recoveryPin,
     })
     setBusy(false)
     if (signupError) setError(signupError)
@@ -173,6 +179,21 @@ export default function SignUp({ onBack }) {
               <label htmlFor="confirmPassword">Confirm password</label>
               <input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
             </div>
+          </div>
+
+          <div className="login-field">
+            <label htmlFor="recoveryPin">Recovery PIN — 6 digits (recommended)</label>
+            <input
+              id="recoveryPin"
+              inputMode="numeric"
+              maxLength={6}
+              value={recoveryPin}
+              onChange={(e) => setRecoveryPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="123456"
+            />
+            <span style={{ fontSize: '.72rem', color: 'var(--muted)' }}>
+              Lets you reset your own password later if you forget it. You can also set this afterwards.
+            </span>
           </div>
 
           <button className="btn btn-primary btn-block" type="submit" disabled={busy} style={{ marginTop: 16 }}>
