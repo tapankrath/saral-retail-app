@@ -3,21 +3,33 @@ import { useAuth } from '../lib/AuthContext'
 import Dashboard from '../screens/Dashboard'
 import GoodsInventory from '../screens/GoodsInventory'
 import SalesVoucher from '../screens/SalesVoucher'
+import SalesReturn from '../screens/SalesReturn'
 import PurchaseVoucher from '../screens/PurchaseVoucher'
+import PurchaseReturn from '../screens/PurchaseReturn'
+import Orders from '../screens/Orders'
+import EstimateVoucher from '../screens/EstimateVoucher'
 import PaymentReceipt from '../screens/PaymentReceipt'
 import StockAdjust from '../screens/StockAdjust'
 import Reports from '../screens/Reports'
 import AIInsights from '../screens/AIInsights'
+import OrgSetup from '../screens/OrgSetup'
+import StaffManagement from '../screens/StaffManagement'
 
 const NAV_ITEMS = [
   { screen: 'dashboard', label: 'Dashboard', group: null, modules: [] },
   { screen: 'goods', label: 'Goods & Inventory', group: 'Inventory', modules: ['goods_setup'] },
-  { screen: 'stock_adjust', label: 'Stock Adjust', group: 'Inventory', modules: ['stock_adjust'] },
-  { screen: 'sales', label: 'Sales Voucher', group: 'Finance', modules: ['sales_voucher'] },
-  { screen: 'purchase', label: 'Purchase Voucher', group: 'Finance', modules: ['purchase_voucher'] },
+  { screen: 'stock_adjust', label: 'Stock Adjust / Taking', group: 'Inventory', modules: ['stock_adjust', 'stock_taking'] },
+  { screen: 'sales', label: 'Sales Voucher', group: 'Sales', modules: ['sales_voucher'] },
+  { screen: 'sales_return', label: 'Sales Return', group: 'Sales', modules: ['sales_return'] },
+  { screen: 'estimate', label: 'Estimate Voucher', group: 'Sales', modules: ['estimate_voucher'] },
+  { screen: 'purchase', label: 'Purchase Voucher', group: 'Purchase', modules: ['purchase_voucher'] },
+  { screen: 'purchase_return', label: 'Purchase Return', group: 'Purchase', modules: ['purchase_return'] },
+  { screen: 'orders', label: 'Sales / Purchase Orders', group: 'Purchase', modules: ['sales_order', 'purchase_order'] },
   { screen: 'payment_receipt', label: 'Payment / Receipt', group: 'Finance', modules: ['payment_voucher', 'receipt_voucher'] },
   { screen: 'reports', label: 'Reports', group: 'Reports', modules: ['reports'] },
   { screen: 'ai_insights', label: 'AI Insights', group: 'Reports', modules: ['reports'] },
+  { screen: 'org_setup', label: 'Organization & Branch', group: 'Setup', modules: ['system_setup', 'branch_setup'] },
+  { screen: 'staff', label: 'Users & Staff', group: 'Setup', modules: ['user_staff'] },
 ]
 
 export default function Console() {
@@ -106,10 +118,16 @@ export default function Console() {
           {screen === 'goods' && <GoodsInventory />}
           {screen === 'stock_adjust' && <StockAdjust />}
           {screen === 'sales' && <SalesVoucher />}
+          {screen === 'sales_return' && <SalesReturn />}
+          {screen === 'estimate' && <EstimateVoucher />}
           {screen === 'purchase' && <PurchaseVoucher />}
+          {screen === 'purchase_return' && <PurchaseReturn />}
+          {screen === 'orders' && <Orders />}
           {screen === 'payment_receipt' && <PaymentReceipt />}
           {screen === 'reports' && <Reports />}
           {screen === 'ai_insights' && <AIInsights />}
+          {screen === 'org_setup' && <OrgSetup />}
+          {screen === 'staff' && <StaffManagement />}
         </div>
       </div>
     </div>
