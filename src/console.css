@@ -56,6 +56,13 @@
   .backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:55;}
   .backdrop.open{display:block;}
   @media (min-width:821px){.backdrop{display:none !important;}}
+
+  /* BARCODE SCANNER */
+  .scanner-overlay{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:20px;}
+  .scanner-box{width:100%;max-width:420px;background:var(--surface-2);border-radius:12px;padding:16px;border:1px solid var(--border);}
+  .scanner-video{width:100%;border-radius:8px;background:#000;aspect-ratio:4/3;object-fit:cover;}
+  .barcode-field{display:flex;gap:8px;}
+  .barcode-field input{flex:1;}
   .brand{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;}
   .brand .lockup{display:flex;flex-direction:column;line-height:1;gap:3px;}
   .brand .word{font-family:var(--font-display);font-weight:600;font-size:1.3rem;color:var(--ink);}

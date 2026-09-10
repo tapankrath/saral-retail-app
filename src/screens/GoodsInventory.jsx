@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import BarcodeScanner from '../components/BarcodeScanner'
 
 const NEW_CATEGORY = '__new_category__'
 const NEW_GROUP = '__new_group__'
@@ -42,6 +43,7 @@ export default function GoodsInventory() {
   const [newCategory, setNewCategory] = useState({ name: '', hsn: '' })
   const [showAddGroup, setShowAddGroup] = useState(false)
   const [newGroup, setNewGroup] = useState('')
+  const [scanTarget, setScanTarget] = useState(null) // 'form' | 'search' | null
 
   async function load() {
     setLoading(true)
@@ -169,6 +171,15 @@ export default function GoodsInventory() {
     await load()
   }
 
+  function handleScanned(code) {
+    if (scanTarget === 'search') {
+      setSearch(code)
+    } else if (scanTarget === 'form') {
+      updateForm('barcode', code)
+    }
+    setScanTarget(null)
+  }
+
   return (
     <section>
       <div className="page-head">
@@ -272,7 +283,10 @@ export default function GoodsInventory() {
             </div>
             <div className="field">
               <label>Barcode (optional)</label>
-              <input value={form.barcode} onChange={(e) => updateForm('barcode', e.target.value)} placeholder="Scan or type" />
+              <div className="barcode-field">
+                <input value={form.barcode} onChange={(e) => updateForm('barcode', e.target.value)} placeholder="Scan or type" />
+                <button type="button" className="btn btn-ghost" onClick={() => setScanTarget('form')}>📷 Scan</button>
+              </div>
             </div>
           </div>
 
@@ -340,10 +354,13 @@ export default function GoodsInventory() {
       )}
 
       <div className="toolbar">
-        <div className="search-box">
+        <div className="search-box barcode-field">
           <input placeholder="Search goods or scan/type barcode" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <button type="button" className="btn btn-ghost" onClick={() => setScanTarget('search')}>📷 Scan</button>
         </div>
       </div>
+
+      {scanTarget && <BarcodeScanner onDetected={handleScanned} onClose={() => setScanTarget(null)} />}
 
       {error && <p className="empty-note">Couldn't load goods: {error}</p>}
       {loading ? (

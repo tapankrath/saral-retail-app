@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import BarcodeScanner from '../components/BarcodeScanner'
 
 function money(n) {
   return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -19,6 +20,7 @@ export default function SalesVoucher() {
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [showScanner, setShowScanner] = useState(false)
   const [debtorGroupId, setDebtorGroupId] = useState(null)
   const [showAddCustomer, setShowAddCustomer] = useState(false)
   const [newCustomer, setNewCustomer] = useState({ name: '', mobile: '', gstin: '', email: '' })
@@ -97,6 +99,17 @@ export default function SalesVoucher() {
     if (!goodsQuery) return []
     return goods.filter((g) => g.goods_name.toLowerCase().includes(goodsQuery.toLowerCase())).slice(0, 6)
   }, [goodsQuery, goods])
+
+  function handleScanned(code) {
+    setShowScanner(false)
+    const match = goods.find((g) => g.barcode === code || g.lot_barcode === code)
+    if (!match) {
+      setError(`No goods found with barcode ${code}.`)
+      return
+    }
+    setError(null)
+    addLine(match)
+  }
 
   function addLine(g) {
     setLines((prev) => [
@@ -247,14 +260,16 @@ export default function SalesVoucher() {
       <div className="voucher-grid">
         <div>
           <div className="line-toolbar">
-            <div className="search-box" style={{ maxWidth: '100%', flex: 1, position: 'relative' }}>
+            <div className="search-box barcode-field" style={{ maxWidth: '100%', flex: 1, position: 'relative' }}>
               <input
                 placeholder="Search goods to add a line"
                 value={goodsQuery}
                 onChange={(e) => setGoodsQuery(e.target.value)}
               />
+              <button type="button" className="btn btn-ghost" onClick={() => setShowScanner(true)}>📷 Scan</button>
             </div>
           </div>
+          {showScanner && <BarcodeScanner onDetected={handleScanned} onClose={() => setShowScanner(false)} />}
           {goodsMatches.length > 0 && (
             <div className="table-wrap" style={{ marginBottom: 12 }}>
               <table className="data">
