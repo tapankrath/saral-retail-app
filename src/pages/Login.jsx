@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../lib/AuthContext'
 
-export default function Login() {
+export default function Login({ onSignUp }) {
   const { loginWithLoginNameAndOrg } = useAuth()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -70,6 +70,12 @@ export default function Login() {
         <p className="login-hint">
           Demo login: <strong>rina@demo1</strong> (owner, full access) or{' '}
           <strong>priya@demo1</strong> (cashier — sales voucher only), password <strong>Saral@123</strong>.
+        </p>
+        <p className="login-hint">
+          New business?{' '}
+          <a href="#" onClick={(e) => { e.preventDefault(); onSignUp() }} style={{ color: 'var(--accent)', fontWeight: 600 }}>
+            Create an account
+          </a>
         </p>
       </div>
     </div>
