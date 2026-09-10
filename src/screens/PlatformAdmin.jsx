@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const STATUS_LABEL = { trial: 'Trial', active: 'Active', past_due: 'Past due', cancelled: 'Cancelled' }
@@ -8,16 +8,25 @@ function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString('en-IN') : '—'
 }
 
+function fmtDateTime(d) {
+  if (!d) return 'never'
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / (1000 * 60 * 60 * 24))
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days}d ago`
+  return new Date(d).toLocaleDateString('en-IN')
+}
+
 function daysLeft(trialEndsAt) {
   if (!trialEndsAt) return null
   return Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
 }
 
-// Only reachable by a platform admin — this manages billing across every
-// organization on Saral Retail, not just the signed-in owner's own business.
-// There's no payment gateway wired up yet, so this is where a payment
-// received outside the app (bank transfer, UPI, invoice) gets recorded by
-// switching the organization over to the plan they paid for.
+// Only reachable by a platform admin — this is the single place to see every
+// organization on Saral Retail, what stage they're at (trial vs paying),
+// how much they've actually used the product, and to record a payment that
+// was collected outside the app (there's no payment gateway wired up yet)
+// by switching them onto the plan they paid for.
 export default function PlatformAdmin() {
   const [orgs, setOrgs] = useState([])
   const [plans, setPlans] = useState([])
@@ -26,11 +35,13 @@ export default function PlatformAdmin() {
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
 
   async function load() {
     setLoading(true)
     const [{ data: orgRows }, { data: planRows }] = await Promise.all([
-      supabase.from('v_admin_org_billing').select('*').order('created_at', { ascending: false }),
+      supabase.from('v_admin_org_overview').select('*').order('signed_up_at', { ascending: false }),
       supabase.from('subscription_plans').select('*').order('sort_order'),
     ])
     setOrgs(orgRows ?? [])
@@ -41,6 +52,36 @@ export default function PlatformAdmin() {
   useEffect(() => {
     load()
   }, [])
+
+  const stats = useMemo(() => {
+    const s = { total: orgs.length, trial: 0, expiringSoon: 0, active: 0, pastDue: 0, cancelled: 0 }
+    for (const o of orgs) {
+      if (o.subscription_status === 'trial') {
+        s.trial++
+        const dl = daysLeft(o.trial_ends_at)
+        if (dl !== null && dl <= 3) s.expiringSoon++
+      } else if (o.subscription_status === 'active') s.active++
+      else if (o.subscription_status === 'past_due') s.pastDue++
+      else if (o.subscription_status === 'cancelled') s.cancelled++
+    }
+    return s
+  }, [orgs])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return orgs.filter((o) => {
+      if (statusFilter !== 'all' && o.subscription_status !== statusFilter) return false
+      if (!q) return true
+      return (
+        o.name?.toLowerCase().includes(q) ||
+        o.short_code?.toLowerCase().includes(q) ||
+        o.owner_name?.toLowerCase().includes(q) ||
+        o.owner_login?.toLowerCase().includes(q) ||
+        o.owner_email?.toLowerCase().includes(q) ||
+        o.owner_mobile?.includes(q)
+      )
+    })
+  }, [orgs, search, statusFilter])
 
   function selectOrg(org) {
     setSelectedId(org.organization_id)
@@ -80,9 +121,33 @@ export default function PlatformAdmin() {
     <section>
       <div className="page-head">
         <div>
-          <h1>Platform Billing Admin</h1>
-          <p className="sub">Every organization on Saral Retail — trial status, plan, and manual billing notes</p>
+          <h1>Platform Admin</h1>
+          <p className="sub">Every organization on Saral Retail — signups, trials, usage, and billing</p>
         </div>
+      </div>
+
+      <div className="admin-stat-row">
+        <div className="admin-stat"><div className="n">{stats.total}</div><div className="l">Organizations</div></div>
+        <div className="admin-stat"><div className="n">{stats.trial}</div><div className="l">On trial</div></div>
+        <div className={`admin-stat${stats.expiringSoon > 0 ? ' warn' : ''}`}><div className="n">{stats.expiringSoon}</div><div className="l">Trial ends ≤3 days</div></div>
+        <div className="admin-stat ok"><div className="n">{stats.active}</div><div className="l">Active (paying)</div></div>
+        <div className={`admin-stat${stats.pastDue > 0 ? ' warn' : ''}`}><div className="n">{stats.pastDue}</div><div className="l">Past due</div></div>
+        <div className="admin-stat"><div className="n">{stats.cancelled}</div><div className="l">Cancelled</div></div>
+      </div>
+
+      <div className="admin-filters">
+        <input
+          placeholder="Search by org, owner, login, email or mobile…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ flex: 1, minWidth: 220 }}
+        />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="all">All statuses</option>
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+          ))}
+        </select>
       </div>
 
       {loading ? (
@@ -95,16 +160,21 @@ export default function PlatformAdmin() {
                 <thead>
                   <tr>
                     <th>Organization</th>
+                    <th>Owner</th>
+                    <th>Signed up</th>
                     <th>Status</th>
+                    <th>Trial</th>
                     <th>Plan</th>
-                    <th>Trial ends</th>
                     <th>Requested</th>
                     <th>Users</th>
+                    <th>Usage</th>
+                    <th>Last active</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {orgs.map((o) => {
+                  {filtered.map((o) => {
                     const dl = daysLeft(o.trial_ends_at)
+                    const lastActive = [o.last_login_at, o.last_voucher_at].filter(Boolean).sort().pop()
                     return (
                       <tr
                         key={o.organization_id}
@@ -116,17 +186,31 @@ export default function PlatformAdmin() {
                           <div className="sub" style={{ fontSize: '.7rem' }}>{o.short_code} · {o.city ?? '—'}</div>
                         </td>
                         <td>
+                          {o.owner_name ?? '—'}
+                          <div className="sub" style={{ fontSize: '.7rem' }}>{o.owner_login}{o.owner_mobile ? ` · ${o.owner_mobile}` : ''}</div>
+                        </td>
+                        <td>{fmtDate(o.signed_up_at)}</td>
+                        <td>
                           <span className={`chip ${o.subscription_status === 'active' ? 'ok' : o.subscription_status === 'trial' ? '' : 'out'}`}>
                             {STATUS_LABEL[o.subscription_status] ?? o.subscription_status}
                           </span>
                         </td>
+                        <td>
+                          {o.subscription_status === 'trial'
+                            ? (dl !== null ? (dl >= 0 ? `${dl}d left` : 'expired') : '—')
+                            : '—'}
+                        </td>
                         <td>{o.plan_name ?? '—'}</td>
-                        <td>{o.subscription_status === 'trial' ? (dl !== null ? (dl >= 0 ? `${dl}d left` : 'expired') : '—') : '—'}</td>
                         <td>{o.requested_plan_name ?? '—'}</td>
-                        <td className="tnum">{o.active_user_count}</td>
+                        <td className="tnum">{o.active_user_count}/{o.total_user_count}</td>
+                        <td className="tnum">{o.goods_count}g · {o.sales_voucher_count + o.purchase_voucher_count}v</td>
+                        <td>{fmtDateTime(lastActive)}</td>
                       </tr>
                     )
                   })}
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={10} className="empty-note">No organizations match.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -134,12 +218,23 @@ export default function PlatformAdmin() {
 
           <div className="card">
             {!selected ? (
-              <p className="empty-note">Select an organization to manage its billing.</p>
+              <p className="empty-note">Select an organization to see full detail and manage its billing.</p>
             ) : (
               <>
                 <h3>{selected.name}</h3>
-                <p className="sub">{selected.short_code} · created {fmtDate(selected.created_at)}</p>
-                <p className="sub" style={{ marginTop: 4 }}>{selected.email ?? '—'} {selected.mobile ? `· ${selected.mobile}` : ''}</p>
+                <p className="sub">{selected.short_code} · signed up {fmtDate(selected.signed_up_at)}</p>
+                <p className="sub" style={{ marginTop: 4 }}>
+                  Owner: {selected.owner_name} ({selected.owner_login})
+                  {selected.owner_email ? ` · ${selected.owner_email}` : ''}
+                  {selected.owner_mobile ? ` · ${selected.owner_mobile}` : ''}
+                </p>
+                <p className="sub" style={{ marginTop: 4 }}>
+                  {selected.total_user_count} user{selected.total_user_count === 1 ? '' : 's'} ({selected.active_user_count} active) ·{' '}
+                  {selected.goods_count} goods · {selected.sales_voucher_count} sales · {selected.purchase_voucher_count} purchases
+                </p>
+                <p className="sub" style={{ marginTop: 4 }}>
+                  Last login {fmtDateTime(selected.last_login_at)} · last voucher {fmtDateTime(selected.last_voucher_at)}
+                </p>
 
                 {msg && <div className={msg.ok ? 'login-hint' : 'login-error'} style={{ marginTop: 10 }}>{msg.text}</div>}
 
