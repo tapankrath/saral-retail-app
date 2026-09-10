@@ -5,7 +5,7 @@ import { useAuth } from '../lib/AuthContext'
 const LEVELS = ['none', 'view', 'add_only', 'full']
 const LEVEL_LABEL = { none: 'No access', view: 'View only', add_only: 'View + Add', full: 'Full' }
 
-const emptyForm = { fullName: '', loginName: '', password: '', designation: '', mobile: '' }
+const emptyForm = { fullName: '', loginName: '', password: '', designation: '', mobile: '', recoveryPin: '' }
 
 export default function StaffManagement() {
   const { profile, canView, canEdit } = useAuth()
@@ -70,6 +70,10 @@ export default function StaffManagement() {
       setAddError('Full name, login name, and an 8+ character password are required.')
       return
     }
+    if (form.recoveryPin && !/^\d{6}$/.test(form.recoveryPin)) {
+      setAddError('Recovery PIN must be exactly 6 digits, or left blank.')
+      return
+    }
     setAdding(true)
     const { data, error } = await supabase.rpc('create_staff_user', {
       p_full_name: form.fullName.trim(),
@@ -77,6 +81,7 @@ export default function StaffManagement() {
       p_password: form.password,
       p_designation: form.designation || null,
       p_mobile: form.mobile || null,
+      p_recovery_pin: form.recoveryPin || null,
     })
     setAdding(false)
     if (error) {
@@ -162,6 +167,17 @@ export default function StaffManagement() {
           <div className="field">
             <label>Password (8+ characters)</label>
             <input type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} />
+          </div>
+          <div className="field">
+            <label>Recovery PIN — 6 digits (optional)</label>
+            <input
+              inputMode="numeric"
+              maxLength={6}
+              value={form.recoveryPin}
+              onChange={(e) => setForm((p) => ({ ...p, recoveryPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+              placeholder="123456"
+            />
+            <span style={{ fontSize: '.72rem', color: 'var(--muted)' }}>Lets them reset their own password later. They can also set this themselves afterwards.</span>
           </div>
           <p style={{ fontSize: '.72rem', color: 'var(--muted)' }}>
             They'll sign in as <strong>{form.loginName || 'loginname'}@{profile?.organizations?.short_code}</strong>.
