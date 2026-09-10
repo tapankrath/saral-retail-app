@@ -11,7 +11,9 @@ export function AuthProvider({ children }) {
   async function loadProfileAndPermissions(userId) {
     const { data: profileRow } = await supabase
       .from('users')
-      .select('*, branches(id, name, voucher_prefix), organizations(id, name, short_code)')
+      .select(
+        '*, branches(id, name, voucher_prefix), organizations(id, name, short_code, subscription_status, trial_ends_at, plan_id, requested_plan_id, upgrade_requested_at, billing_notes)'
+      )
       .eq('id', userId)
       .single()
     setProfile(profileRow ?? null)
@@ -123,6 +125,18 @@ export function AuthProvider({ children }) {
     return { error: null }
   }
 
+  // Owner-only: record which plan they'd like to move to. This doesn't take
+  // payment or change anything by itself — there's no payment gateway wired
+  // up yet — it just flags the request so it can be followed up on and
+  // confirmed manually, then the organization gets switched over from the
+  // admin side.
+  async function requestPlanUpgrade(planId) {
+    const { error } = await supabase.rpc('request_plan_upgrade', { p_plan_id: planId })
+    if (error) return { error: error.message }
+    await loadProfileAndPermissions(session.user.id)
+    return { error: null }
+  }
+
   function moduleLevel(code) {
     if (permissions?.isOwner) return 'full'
     return permissions?.modules?.[code]?.level ?? 'none'
@@ -147,6 +161,8 @@ export function AuthProvider({ children }) {
     resetPasswordWithPin,
     setMyRecoveryPin,
     changeMyPassword,
+    requestPlanUpgrade,
+    isPlatformAdmin: !!profile?.is_platform_admin,
     logout,
     moduleLevel,
     canView,
