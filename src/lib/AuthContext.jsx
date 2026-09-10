@@ -60,6 +60,34 @@ export function AuthProvider({ children }) {
     return { error: null }
   }
 
+  async function signUpOrganization(fields) {
+    const { data, error: signupError } = await supabase.rpc('signup_organization', {
+      p_org_name: fields.orgName,
+      p_short_code: fields.shortCode,
+      p_owner_full_name: fields.ownerFullName,
+      p_login_name: fields.loginName,
+      p_password: fields.password,
+      p_owner_mobile: fields.ownerMobile || null,
+      p_contact_email: fields.contactEmail || null,
+      p_city: fields.city || null,
+      p_state: fields.state || null,
+    })
+    if (signupError) {
+      return { error: signupError.message }
+    }
+    const row = Array.isArray(data) ? data[0] : data
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: row.login_email,
+      password: fields.password,
+    })
+    if (signInError) {
+      return {
+        error: `Account created, but automatic sign-in failed. Sign in with ${fields.loginName}@${fields.shortCode}.`,
+      }
+    }
+    return { error: null }
+  }
+
   async function logout() {
     await supabase.auth.signOut()
   }
@@ -84,6 +112,7 @@ export function AuthProvider({ children }) {
     permissions,
     loading: session === undefined || (session && !permissions),
     loginWithLoginNameAndOrg,
+    signUpOrganization,
     logout,
     moduleLevel,
     canView,
