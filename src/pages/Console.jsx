@@ -3,11 +3,19 @@ import { useAuth } from '../lib/AuthContext'
 import Dashboard from '../screens/Dashboard'
 import GoodsInventory from '../screens/GoodsInventory'
 import SalesVoucher from '../screens/SalesVoucher'
+import PurchaseVoucher from '../screens/PurchaseVoucher'
+import PaymentReceipt from '../screens/PaymentReceipt'
+import StockAdjust from '../screens/StockAdjust'
+import Reports from '../screens/Reports'
 
 const NAV_ITEMS = [
-  { screen: 'dashboard', label: 'Dashboard', group: null, module: null },
-  { screen: 'goods', label: 'Goods & Inventory', group: 'Inventory', module: 'goods_setup' },
-  { screen: 'sales', label: 'Sales Voucher', group: 'Finance', module: 'sales_voucher' },
+  { screen: 'dashboard', label: 'Dashboard', group: null, modules: [] },
+  { screen: 'goods', label: 'Goods & Inventory', group: 'Inventory', modules: ['goods_setup'] },
+  { screen: 'stock_adjust', label: 'Stock Adjust', group: 'Inventory', modules: ['stock_adjust'] },
+  { screen: 'sales', label: 'Sales Voucher', group: 'Finance', modules: ['sales_voucher'] },
+  { screen: 'purchase', label: 'Purchase Voucher', group: 'Finance', modules: ['purchase_voucher'] },
+  { screen: 'payment_receipt', label: 'Payment / Receipt', group: 'Finance', modules: ['payment_voucher', 'receipt_voucher'] },
+  { screen: 'reports', label: 'Reports', group: 'Reports', modules: ['reports'] },
 ]
 
 export default function Console() {
@@ -21,6 +29,16 @@ export default function Console() {
     .join('')
     .slice(0, 2)
     .toUpperCase()
+
+  function visible(item) {
+    return item.modules.length === 0 || item.modules.some((m) => canView(m))
+  }
+
+  const visibleItems = NAV_ITEMS.filter(visible)
+  const navRows = visibleItems.map((item, i) => ({
+    item,
+    showGroupLabel: item.group && item.group !== visibleItems[i - 1]?.group,
+  }))
 
   return (
     <div className="app">
@@ -36,11 +54,10 @@ export default function Console() {
         </div>
 
         <nav className="sidenav">
-          {NAV_ITEMS.map((item) => {
-            if (item.module && !canView(item.module)) return null
-            return (
+          {navRows.map(({ item, showGroupLabel }) => (
+            <div key={item.screen}>
+              {showGroupLabel && <div className="nav-grp-label">{item.group}</div>}
               <button
-                key={item.screen}
                 className={`nav-item${screen === item.screen ? ' active' : ''}`}
                 onClick={() => {
                   setScreen(item.screen)
@@ -49,8 +66,8 @@ export default function Console() {
               >
                 {item.label}
               </button>
-            )
-          })}
+            </div>
+          ))}
         </nav>
 
         <div className="sidebar-foot">
@@ -85,7 +102,11 @@ export default function Console() {
         <div className="content">
           {screen === 'dashboard' && <Dashboard />}
           {screen === 'goods' && <GoodsInventory />}
+          {screen === 'stock_adjust' && <StockAdjust />}
           {screen === 'sales' && <SalesVoucher />}
+          {screen === 'purchase' && <PurchaseVoucher />}
+          {screen === 'payment_receipt' && <PaymentReceipt />}
+          {screen === 'reports' && <Reports />}
         </div>
       </div>
     </div>
