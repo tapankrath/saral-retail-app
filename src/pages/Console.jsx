@@ -15,6 +15,8 @@ import AIInsights from '../screens/AIInsights'
 import OrgSetup from '../screens/OrgSetup'
 import StaffManagement from '../screens/StaffManagement'
 import AccountSecurity from '../screens/AccountSecurity'
+import Billing from '../screens/Billing'
+import PlatformAdmin from '../screens/PlatformAdmin'
 
 const NAV_ITEMS = [
   { screen: 'dashboard', label: 'Dashboard', group: null, modules: [] },
@@ -32,10 +34,17 @@ const NAV_ITEMS = [
   { screen: 'org_setup', label: 'Organization & Branch', group: 'Setup', modules: ['system_setup', 'branch_setup'] },
   { screen: 'staff', label: 'Users & Staff', group: 'Setup', modules: ['user_staff'] },
   { screen: 'account_security', label: 'Account & Security', group: 'Setup', modules: [] },
+  { screen: 'billing', label: 'Billing & Plan', group: 'Setup', modules: [], ownerOnly: true },
+  { screen: 'platform_admin', label: 'Platform Billing Admin', group: 'Setup', modules: [], adminOnly: true },
 ]
 
+function daysLeft(trialEndsAt) {
+  if (!trialEndsAt) return null
+  return Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+}
+
 export default function Console() {
-  const { profile, logout, canView } = useAuth()
+  const { profile, logout, canView, isPlatformAdmin } = useAuth()
   const [screen, setScreen] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -47,8 +56,15 @@ export default function Console() {
     .toUpperCase()
 
   function visible(item) {
+    if (item.ownerOnly && !profile?.is_owner) return false
+    if (item.adminOnly && !isPlatformAdmin) return false
     return item.modules.length === 0 || item.modules.some((m) => canView(m))
   }
+
+  const org = profile?.organizations
+  const remaining = daysLeft(org?.trial_ends_at)
+  const showTrialStrip = org?.subscription_status === 'trial' || org?.subscription_status === 'past_due' || org?.subscription_status === 'cancelled'
+  const urgent = org?.subscription_status !== 'trial' || (remaining !== null && remaining <= 3)
 
   const visibleItems = NAV_ITEMS.filter(visible)
   const navRows = visibleItems.map((item, i) => ({
@@ -97,6 +113,22 @@ export default function Console() {
       {sidebarOpen && <div className="backdrop open" onClick={() => setSidebarOpen(false)} />}
 
       <div className="main">
+        {showTrialStrip && (
+          <div className={`trial-strip${urgent ? ' urgent' : ''}`}>
+            {org.subscription_status === 'trial' && (
+              remaining !== null && remaining >= 0
+                ? `${remaining} day${remaining === 1 ? '' : 's'} left in your free trial.`
+                : 'Your free trial has ended.'
+            )}
+            {org.subscription_status === 'past_due' && 'Your subscription payment is past due.'}
+            {org.subscription_status === 'cancelled' && 'Your subscription is cancelled.'}
+            {profile?.is_owner ? (
+              <button className="link-btn" onClick={() => setScreen('billing')}>View plans &amp; upgrade</button>
+            ) : (
+              <span>Ask your owner to upgrade the plan.</span>
+            )}
+          </div>
+        )}
         <header className="topbar">
           <button className="menu-btn" aria-label="Open menu" onClick={() => setSidebarOpen(true)}>
             ☰
@@ -131,6 +163,8 @@ export default function Console() {
           {screen === 'org_setup' && <OrgSetup />}
           {screen === 'staff' && <StaffManagement />}
           {screen === 'account_security' && <AccountSecurity />}
+          {screen === 'billing' && <Billing />}
+          {screen === 'platform_admin' && <PlatformAdmin />}
         </div>
       </div>
     </div>
