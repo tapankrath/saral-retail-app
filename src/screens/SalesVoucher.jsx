@@ -20,8 +20,14 @@ export default function SalesVoucher() {
 
   useEffect(() => {
     async function load() {
-      const { data: acctRows } = await supabase.from('accounts').select('id, name').is('system_role', null).order('name')
-      setAccounts(acctRows ?? [])
+      // customers are accounts under an assets group without a system_role
+      // (mirrors the supplier filter in Purchase Voucher, which uses 'liabilities')
+      const { data: acctRows } = await supabase
+        .from('accounts')
+        .select('id, name, account_groups(transaction_type)')
+        .is('system_role', null)
+        .order('name')
+      setAccounts((acctRows ?? []).filter((a) => a.account_groups?.transaction_type === 'assets'))
       const { data: goodsRows } = await supabase.from('goods_with_stock').select('*').order('goods_name')
       setGoods(goodsRows ?? [])
     }
