@@ -6,6 +6,8 @@ function money(n) {
   return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+const NEW_CUSTOMER = '__new__'
+
 export default function SalesVoucher() {
   const { profile, canAdd } = useAuth()
   const [accounts, setAccounts] = useState([])
@@ -17,22 +19,79 @@ export default function SalesVoucher() {
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [debtorGroupId, setDebtorGroupId] = useState(null)
+  const [showAddCustomer, setShowAddCustomer] = useState(false)
+  const [newCustomer, setNewCustomer] = useState({ name: '', mobile: '', gstin: '', email: '' })
+  const [addCustomerError, setAddCustomerError] = useState(null)
+  const [addingCustomer, setAddingCustomer] = useState(false)
+
+  async function loadAccounts() {
+    // customers are accounts under an assets group without a system_role
+    // (mirrors the supplier filter in Purchase Voucher, which uses 'liabilities')
+    const { data: acctRows } = await supabase
+      .from('accounts')
+      .select('id, name, account_groups(transaction_type)')
+      .is('system_role', null)
+      .order('name')
+    setAccounts((acctRows ?? []).filter((a) => a.account_groups?.transaction_type === 'assets'))
+  }
 
   useEffect(() => {
+    loadAccounts()
+    supabase
+      .from('account_groups')
+      .select('id')
+      .eq('name', 'Sundry Debtors')
+      .maybeSingle()
+      .then(({ data }) => setDebtorGroupId(data?.id ?? null))
     async function load() {
-      // customers are accounts under an assets group without a system_role
-      // (mirrors the supplier filter in Purchase Voucher, which uses 'liabilities')
-      const { data: acctRows } = await supabase
-        .from('accounts')
-        .select('id, name, account_groups(transaction_type)')
-        .is('system_role', null)
-        .order('name')
-      setAccounts((acctRows ?? []).filter((a) => a.account_groups?.transaction_type === 'assets'))
       const { data: goodsRows } = await supabase.from('goods_with_stock').select('*').order('goods_name')
       setGoods(goodsRows ?? [])
     }
     load()
   }, [])
+
+  function handleAccountChange(value) {
+    if (value === NEW_CUSTOMER) {
+      setShowAddCustomer(true)
+      return
+    }
+    setAccountId(value)
+  }
+
+  async function handleAddCustomer() {
+    setAddCustomerError(null)
+    if (!newCustomer.name.trim()) {
+      setAddCustomerError('Customer name is required.')
+      return
+    }
+    if (!debtorGroupId) {
+      setAddCustomerError("Couldn't find the Sundry Debtors account group.")
+      return
+    }
+    setAddingCustomer(true)
+    const { data, error } = await supabase
+      .from('accounts')
+      .insert({
+        organization_id: profile.organization_id,
+        account_group_id: debtorGroupId,
+        name: newCustomer.name.trim(),
+        mobile: newCustomer.mobile || null,
+        gstin: newCustomer.gstin || null,
+        email: newCustomer.email || null,
+      })
+      .select('id')
+      .single()
+    setAddingCustomer(false)
+    if (error) {
+      setAddCustomerError(error.message)
+      return
+    }
+    await loadAccounts()
+    setAccountId(data.id)
+    setNewCustomer({ name: '', mobile: '', gstin: '', email: '' })
+    setShowAddCustomer(false)
+  }
 
   const goodsMatches = useMemo(() => {
     if (!goodsQuery) return []
@@ -140,16 +199,50 @@ export default function SalesVoucher() {
       <div className="voucher-head-grid">
         <div className="field" style={{ marginTop: 0 }}>
           <label>Customer</label>
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+          <select value={accountId} onChange={(e) => handleAccountChange(e.target.value)}>
             <option value="">Select customer…</option>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
+            {canAdd('account_setup') && <option value={NEW_CUSTOMER}>+ Add new customer…</option>}
           </select>
         </div>
       </div>
+
+      {showAddCustomer && (
+        <div className="card" style={{ maxWidth: 480, marginBottom: 20 }}>
+          <h3>Add new customer</h3>
+          {addCustomerError && <div className="login-error">{addCustomerError}</div>}
+          <div className="field" style={{ marginTop: 0 }}>
+            <label>Name</label>
+            <input value={newCustomer.name} onChange={(e) => setNewCustomer((p) => ({ ...p, name: e.target.value }))} />
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label>Mobile (optional)</label>
+              <input value={newCustomer.mobile} onChange={(e) => setNewCustomer((p) => ({ ...p, mobile: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>GSTIN (optional)</label>
+              <input value={newCustomer.gstin} onChange={(e) => setNewCustomer((p) => ({ ...p, gstin: e.target.value }))} />
+            </div>
+          </div>
+          <div className="field">
+            <label>Email (optional)</label>
+            <input value={newCustomer.email} onChange={(e) => setNewCustomer((p) => ({ ...p, email: e.target.value }))} />
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+            <button className="btn btn-primary" onClick={handleAddCustomer} disabled={addingCustomer}>
+              {addingCustomer ? 'Saving…' : 'Save customer'}
+            </button>
+            <button className="btn btn-ghost" onClick={() => setShowAddCustomer(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="voucher-grid">
         <div>

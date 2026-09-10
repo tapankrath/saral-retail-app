@@ -6,6 +6,8 @@ function money(n) {
   return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+const NEW_SUPPLIER = '__new__'
+
 export default function PurchaseVoucher() {
   const { profile, canAdd } = useAuth()
   const [suppliers, setSuppliers] = useState([])
@@ -18,21 +20,78 @@ export default function PurchaseVoucher() {
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [creditorGroupId, setCreditorGroupId] = useState(null)
+  const [showAddSupplier, setShowAddSupplier] = useState(false)
+  const [newSupplier, setNewSupplier] = useState({ name: '', mobile: '', gstin: '', email: '' })
+  const [addSupplierError, setAddSupplierError] = useState(null)
+  const [addingSupplier, setAddingSupplier] = useState(false)
+
+  async function loadSuppliers() {
+    // suppliers are accounts under a liabilities group without a system_role
+    const { data: acctRows } = await supabase
+      .from('accounts')
+      .select('id, name, account_groups(transaction_type)')
+      .is('system_role', null)
+      .order('name')
+    setSuppliers((acctRows ?? []).filter((a) => a.account_groups?.transaction_type === 'liabilities'))
+  }
 
   useEffect(() => {
+    loadSuppliers()
+    supabase
+      .from('account_groups')
+      .select('id')
+      .eq('name', 'Sundry Creditors')
+      .maybeSingle()
+      .then(({ data }) => setCreditorGroupId(data?.id ?? null))
     async function load() {
-      // suppliers are accounts under a liabilities group without a system_role
-      const { data: acctRows } = await supabase
-        .from('accounts')
-        .select('id, name, account_groups(transaction_type)')
-        .is('system_role', null)
-        .order('name')
-      setSuppliers((acctRows ?? []).filter((a) => a.account_groups?.transaction_type === 'liabilities'))
       const { data: goodsRows } = await supabase.from('goods_with_stock').select('*').order('goods_name')
       setGoods(goodsRows ?? [])
     }
     load()
   }, [])
+
+  function handleSupplierChange(value) {
+    if (value === NEW_SUPPLIER) {
+      setShowAddSupplier(true)
+      return
+    }
+    setAccountId(value)
+  }
+
+  async function handleAddSupplier() {
+    setAddSupplierError(null)
+    if (!newSupplier.name.trim()) {
+      setAddSupplierError('Supplier name is required.')
+      return
+    }
+    if (!creditorGroupId) {
+      setAddSupplierError("Couldn't find the Sundry Creditors account group.")
+      return
+    }
+    setAddingSupplier(true)
+    const { data, error } = await supabase
+      .from('accounts')
+      .insert({
+        organization_id: profile.organization_id,
+        account_group_id: creditorGroupId,
+        name: newSupplier.name.trim(),
+        mobile: newSupplier.mobile || null,
+        gstin: newSupplier.gstin || null,
+        email: newSupplier.email || null,
+      })
+      .select('id')
+      .single()
+    setAddingSupplier(false)
+    if (error) {
+      setAddSupplierError(error.message)
+      return
+    }
+    await loadSuppliers()
+    setAccountId(data.id)
+    setNewSupplier({ name: '', mobile: '', gstin: '', email: '' })
+    setShowAddSupplier(false)
+  }
 
   const goodsMatches = useMemo(() => {
     if (!goodsQuery) return []
@@ -126,13 +185,14 @@ export default function PurchaseVoucher() {
       <div className="voucher-head-grid">
         <div className="field" style={{ marginTop: 0 }}>
           <label>Supplier</label>
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+          <select value={accountId} onChange={(e) => handleSupplierChange(e.target.value)}>
             <option value="">Select supplier…</option>
             {suppliers.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
+            {canAdd('account_setup') && <option value={NEW_SUPPLIER}>+ Add new supplier…</option>}
           </select>
         </div>
         <div className="field" style={{ marginTop: 0 }}>
@@ -140,6 +200,39 @@ export default function PurchaseVoucher() {
           <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
         </div>
       </div>
+
+      {showAddSupplier && (
+        <div className="card" style={{ maxWidth: 480, marginBottom: 20 }}>
+          <h3>Add new supplier</h3>
+          {addSupplierError && <div className="login-error">{addSupplierError}</div>}
+          <div className="field" style={{ marginTop: 0 }}>
+            <label>Name</label>
+            <input value={newSupplier.name} onChange={(e) => setNewSupplier((p) => ({ ...p, name: e.target.value }))} />
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label>Mobile (optional)</label>
+              <input value={newSupplier.mobile} onChange={(e) => setNewSupplier((p) => ({ ...p, mobile: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>GSTIN (optional)</label>
+              <input value={newSupplier.gstin} onChange={(e) => setNewSupplier((p) => ({ ...p, gstin: e.target.value }))} />
+            </div>
+          </div>
+          <div className="field">
+            <label>Email (optional)</label>
+            <input value={newSupplier.email} onChange={(e) => setNewSupplier((p) => ({ ...p, email: e.target.value }))} />
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+            <button className="btn btn-primary" onClick={handleAddSupplier} disabled={addingSupplier}>
+              {addingSupplier ? 'Saving…' : 'Save supplier'}
+            </button>
+            <button className="btn btn-ghost" onClick={() => setShowAddSupplier(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="voucher-grid">
         <div>
