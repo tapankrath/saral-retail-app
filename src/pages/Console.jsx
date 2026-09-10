@@ -7,6 +7,7 @@ import PurchaseVoucher from '../screens/PurchaseVoucher'
 import PaymentReceipt from '../screens/PaymentReceipt'
 import StockAdjust from '../screens/StockAdjust'
 import Reports from '../screens/Reports'
+import AIInsights from '../screens/AIInsights'
 
 const NAV_ITEMS = [
   { screen: 'dashboard', label: 'Dashboard', group: null, modules: [] },
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
   { screen: 'purchase', label: 'Purchase Voucher', group: 'Finance', modules: ['purchase_voucher'] },
   { screen: 'payment_receipt', label: 'Payment / Receipt', group: 'Finance', modules: ['payment_voucher', 'receipt_voucher'] },
   { screen: 'reports', label: 'Reports', group: 'Reports', modules: ['reports'] },
+  { screen: 'ai_insights', label: 'AI Insights', group: 'Reports', modules: ['reports'] },
 ]
 
 export default function Console() {
@@ -107,6 +109,7 @@ export default function Console() {
           {screen === 'purchase' && <PurchaseVoucher />}
           {screen === 'payment_receipt' && <PaymentReceipt />}
           {screen === 'reports' && <Reports />}
+          {screen === 'ai_insights' && <AIInsights />}
         </div>
       </div>
     </div>
