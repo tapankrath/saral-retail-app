@@ -50,7 +50,7 @@
   /* SIDEBAR */
   .sidebar{background:var(--surface-2);border-right:1px solid var(--border);padding:18px 14px;display:flex;flex-direction:column;gap:18px;}
   @media (max-width:820px){
-    .sidebar{position:fixed;inset:0 30% 0 0;z-index:60;transform:translateX(-100%);transition:transform .2s ease;}
+    .sidebar{position:fixed;inset:0;right:auto;width:min(84%,300px);z-index:60;transform:translateX(-100%);transition:transform .2s ease;}
     .sidebar.open{transform:translateX(0);}
   }
   .backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:55;}
@@ -70,7 +70,7 @@
   .sidebar-close{display:none;background:none;border:none;color:var(--muted);padding:4px;}
   @media (max-width:820px){.sidebar-close{display:block;}}
 
-  nav.sidenav{display:flex;flex-direction:column;gap:2px;}
+  nav.sidenav{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow-y:auto;}
   .nav-grp-label{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:14px 10px 4px;}
   .nav-item{
     display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;
@@ -141,6 +141,12 @@
 
   .grid-2{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start;}
   @media (max-width:900px){.grid-2{grid-template-columns:1fr;}}
+  /* Grid items don't shrink below the intrinsic (min-content) width of what's
+     inside them by default — without this, a wide table nested a level or two
+     down (e.g. inside .grid-2 > div > .table-wrap) forces the whole column,
+     and the page, wider than the viewport instead of letting .table-wrap
+     handle its own horizontal scroll. */
+  .grid-2 > *, .split > *, .voucher-grid > *, .users-grid > *{min-width:0;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:18px 20px;}
   .card h3{font-size:.98rem;margin-bottom:4px;}
   .card .card-sub{font-size:.78rem;color:var(--muted);margin-bottom:14px;}
@@ -154,6 +160,10 @@
 
   .list-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid var(--border);gap:10px;}
   .list-row:first-of-type{border-top:none;}
+  @media (max-width:480px){
+    .list-row{flex-wrap:wrap;row-gap:6px;}
+    .list-row select{width:100%;}
+  }
   .list-row .name{font-size:.84rem;color:var(--ink);font-weight:500;}
   .list-row .meta{font-size:.72rem;color:var(--muted);}
   .chip{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.04em;padding:3px 8px;border-radius:999px;font-weight:600;white-space:nowrap;}
@@ -184,8 +194,11 @@
   .toggle-chip{display:flex;align-items:center;gap:7px;font-size:.8rem;color:var(--ink-soft);border:1px solid var(--border-strong);border-radius:9px;padding:7px 12px;background:var(--surface);}
 
   /* TABLE */
-  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:13px;overflow:hidden;}
-  table.data{width:100%;border-collapse:collapse;font-size:.84rem;}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:13px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;}
+  table.data{width:100%;min-width:max-content;border-collapse:collapse;font-size:.84rem;}
+  @media (max-width:640px){
+    table.data thead th, table.data td{padding:9px 12px;white-space:nowrap;}
+  }
   table.data thead th{text-align:left;font-family:var(--font-mono);font-size:.64rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:11px 16px;background:var(--surface-2);border-bottom:1px solid var(--border-strong);}
   table.data td{padding:11px 16px;border-bottom:1px solid var(--border);color:var(--ink-soft);vertical-align:middle;}
   table.data tbody tr:last-child td{border-bottom:none;}
@@ -204,14 +217,14 @@
   .field{display:flex;flex-direction:column;gap:5px;margin-top:14px;}
   .field label{font-size:.72rem;color:var(--muted);font-family:var(--font-mono);letter-spacing:.02em;}
   .field input, .field select{border:1px solid var(--border-strong);border-radius:8px;padding:8px 10px;font-size:.84rem;background:var(--surface);color:var(--ink);}
-  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .field-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;}
   .panel-foot{display:flex;gap:10px;margin-top:20px;}
 
   /* SALES VOUCHER SCREEN */
   .voucher-grid{display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start;}
   @media (max-width:1000px){.voucher-grid{grid-template-columns:1fr;}}
-  .voucher-head-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
-  @media (max-width:900px){.voucher-head-grid{grid-template-columns:repeat(2,1fr);}}
+  .voucher-head-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;}
+  .voucher-head-grid > .field{max-width:360px;}
   .line-toolbar{display:flex;gap:10px;margin-bottom:12px;}
   .summary-row{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border);font-size:.85rem;}
   .summary-row:first-child{border-top:none;}
@@ -222,8 +235,8 @@
   .pay-toggle button.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-strong);}
 
   /* REPORTS */
-  .tab-row{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--border);}
-  .tab{padding:10px 4px;margin-right:18px;font-size:.86rem;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;}
+  .tab-row{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--border);overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;}
+  .tab{flex:none;padding:10px 4px;margin-right:18px;font-size:.86rem;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;}
   .tab.active{color:var(--accent-strong);border-bottom-color:var(--accent);}
   table.report td.grp-row{font-weight:700;color:var(--ink);background:var(--surface-2);font-family:var(--font-body);}
   table.report td.total-row{font-weight:700;color:var(--ink);border-top:2px solid var(--border-strong);}
@@ -242,8 +255,8 @@
   .status-dot.active{background:var(--accent);}
   .status-dot.disabled{background:var(--muted);}
 
-  .perm-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:13px;overflow:hidden;}
-  table.perm{width:100%;border-collapse:collapse;font-size:.83rem;}
+  .perm-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:13px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;}
+  table.perm{width:100%;min-width:max-content;border-collapse:collapse;font-size:.83rem;}
   table.perm thead th{text-align:left;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--border-strong);}
   table.perm td{padding:9px 14px;border-bottom:1px solid var(--border);}
   table.perm tbody tr:last-child td{border-bottom:none;}
@@ -259,11 +272,16 @@
 /* --- additions for the real app (login screen, loading/error states) --- */
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px;}
 .login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px 32px;width:100%;max-width:380px;}
+@media (max-width:420px){
+  .login-wrap{padding:14px;}
+  .login-card{padding:26px 18px;}
+}
 .login-card .brand{justify-content:center;margin-bottom:22px;}
 .login-card .brand .lockup{align-items:center;}
 .login-field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
 .login-field label{font-size:.76rem;color:var(--muted);font-family:var(--font-mono);}
 .login-field input{border:1px solid var(--border-strong);border-radius:9px;padding:10px 12px;font-size:.9rem;background:var(--surface);color:var(--ink);}
+.login-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;}
 .login-id-row{display:flex;align-items:center;gap:6px;}
 .login-id-row input{flex:1;min-width:0;}
 .login-id-row span{color:var(--muted);font-family:var(--font-mono);}
