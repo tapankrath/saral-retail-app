@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../lib/AuthContext'
 import Dashboard from '../screens/Dashboard'
 import GoodsInventory from '../screens/GoodsInventory'
@@ -35,7 +35,7 @@ const NAV_ITEMS = [
   { screen: 'staff', label: 'Users & Staff', group: 'Setup', modules: ['user_staff'] },
   { screen: 'account_security', label: 'Account & Security', group: 'Setup', modules: [] },
   { screen: 'billing', label: 'Billing & Plan', group: 'Setup', modules: [], ownerOnly: true },
-  { screen: 'platform_admin', label: 'Platform Billing Admin', group: 'Setup', modules: [], adminOnly: true },
+  { screen: 'platform_admin', label: 'Platform Billing Admin', group: null, modules: [], adminOnly: true },
 ]
 
 function daysLeft(trialEndsAt) {
@@ -48,6 +48,13 @@ export default function Console() {
   const [screen, setScreen] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  // A platform-admin login (used to run Saral Retail itself, not to run a
+  // shop) only ever needs the Platform Admin screen — hide the rest of the
+  // business console for that account and land straight on it.
+  useEffect(() => {
+    if (isPlatformAdmin) setScreen('platform_admin')
+  }, [isPlatformAdmin])
+
   const initials = (profile?.full_name || profile?.login_name || '?')
     .split(' ')
     .map((p) => p[0])
@@ -56,6 +63,7 @@ export default function Console() {
     .toUpperCase()
 
   function visible(item) {
+    if (isPlatformAdmin) return item.screen === 'platform_admin'
     if (item.ownerOnly && !profile?.is_owner) return false
     if (item.adminOnly && !isPlatformAdmin) return false
     return item.modules.length === 0 || item.modules.some((m) => canView(m))
@@ -63,7 +71,9 @@ export default function Console() {
 
   const org = profile?.organizations
   const remaining = daysLeft(org?.trial_ends_at)
-  const showTrialStrip = org?.subscription_status === 'trial' || org?.subscription_status === 'past_due' || org?.subscription_status === 'cancelled'
+  const showTrialStrip =
+    !isPlatformAdmin &&
+    (org?.subscription_status === 'trial' || org?.subscription_status === 'past_due' || org?.subscription_status === 'cancelled')
   const urgent = org?.subscription_status !== 'trial' || (remaining !== null && remaining <= 3)
 
   const visibleItems = NAV_ITEMS.filter(visible)
