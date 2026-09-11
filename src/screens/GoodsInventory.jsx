@@ -6,6 +6,48 @@ import BarcodeScanner from '../components/BarcodeScanner'
 const NEW_CATEGORY = '__new_category__'
 const NEW_GROUP = '__new_group__'
 
+const IMPORT_FIELDS = [
+  'goods_name', 'barcode', 'uom', 'category_name', 'hsn_sac_code', 'group_name',
+  'tax_percent', 'mrp', 'lot_value', 'min_sale_price', 'opening_qty', 'reorder_qty',
+  'min_stock', 'max_stock', 'batch_no', 'expiry_date', 'alt_uom', 'alt_uom_factor',
+]
+
+const IMPORT_TEMPLATE_CSV =
+  IMPORT_FIELDS.join(',') +
+  '\n' +
+  'Toor Dal 1kg,8901030800001,Pc,Groceries,1006,Local Farms,5,145,110,,50,20,,,,,,\n' +
+  'Basmati Rice 5kg,,Pc,Groceries,1006,,5,410,330,,20,10,,,,,,\n'
+
+// Very small RFC4180-ish CSV parser: handles quoted fields, escaped quotes ("") and CRLF/LF.
+function parseCsv(text) {
+  const rows = []
+  let row = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++ } else { inQuotes = false }
+      } else {
+        field += c
+      }
+    } else if (c === '"') {
+      inQuotes = true
+    } else if (c === ',') {
+      row.push(field); field = ''
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++
+      row.push(field); field = ''
+      rows.push(row); row = []
+    } else {
+      field += c
+    }
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row) }
+  return rows.filter((r) => r.some((cell) => cell.trim() !== ''))
+}
+
 const emptyForm = {
   goodsName: '',
   uom: 'Pc',
@@ -44,6 +86,14 @@ export default function GoodsInventory() {
   const [showAddGroup, setShowAddGroup] = useState(false)
   const [newGroup, setNewGroup] = useState('')
   const [scanTarget, setScanTarget] = useState(null) // 'form' | 'search' | null
+
+  const [showImport, setShowImport] = useState(false)
+  const [importStep, setImportStep] = useState('upload') // 'upload' | 'preview' | 'results'
+  const [importFileName, setImportFileName] = useState('')
+  const [importParseError, setImportParseError] = useState(null)
+  const [importPreview, setImportPreview] = useState([]) // [{ normalized, willCreate, note, issue }]
+  const [importResults, setImportResults] = useState([])
+  const [importing, setImporting] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -180,6 +230,97 @@ export default function GoodsInventory() {
     setScanTarget(null)
   }
 
+  function downloadImportTemplate() {
+    const blob = new Blob([IMPORT_TEMPLATE_CSV], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'saral-goods-import-template.csv'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  function resetImport() {
+    setImportStep('upload')
+    setImportFileName('')
+    setImportParseError(null)
+    setImportPreview([])
+    setImportResults([])
+  }
+
+  function classifyImportRow(norm) {
+    const barcode = norm.barcode.trim()
+    if (barcode && rows.some((r) => r.barcode === barcode || r.lot_barcode === barcode)) {
+      return { willCreate: false, note: 'Matches by barcode' }
+    }
+    const name = norm.goods_name.trim().toLowerCase()
+    const nameMatches = name ? rows.filter((r) => r.goods_name.trim().toLowerCase() === name) : []
+    if (nameMatches.length === 1) return { willCreate: false, note: 'Matches by name' }
+    if (nameMatches.length > 1) return { willCreate: false, note: 'Multiple batches — new batch added' }
+    return { willCreate: true, note: 'New item' }
+  }
+
+  function handleImportFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setImportParseError(null)
+    setImportFileName(file.name)
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const text = String(reader.result ?? '')
+        const table = parseCsv(text)
+        if (table.length < 2) {
+          setImportParseError('No data rows found. Make sure the first row is the header and there is at least one item below it.')
+          return
+        }
+        const headers = table[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, '_'))
+        if (!headers.includes('goods_name')) {
+          setImportParseError('The CSV must have a "goods_name" column. Download the template below to see the expected columns.')
+          return
+        }
+        const preview = table.slice(1).map((cells) => {
+          const norm = {}
+          IMPORT_FIELDS.forEach((f) => { norm[f] = '' })
+          headers.forEach((h, i) => {
+            if (IMPORT_FIELDS.includes(h)) norm[h] = (cells[i] ?? '').trim()
+          })
+          const { willCreate, note } = classifyImportRow(norm)
+          let issue = null
+          if (!norm.goods_name) issue = 'Goods name is required'
+          else if (willCreate && !norm.mrp) issue = 'MRP is required for new items'
+          else if (norm.mrp && Number(norm.mrp) <= 0) issue = 'MRP must be greater than zero'
+          return { normalized: norm, willCreate, note, issue }
+        })
+        setImportPreview(preview)
+        setImportStep('preview')
+      } catch (err) {
+        setImportParseError('Could not read that file as CSV: ' + err.message)
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  async function handleCommitImport() {
+    setImporting(true)
+    const { data, error } = await supabase.rpc('import_goods_csv', {
+      p_branch_id: profile.home_branch_id,
+      p_rows: importPreview.map((r) => r.normalized),
+    })
+    setImporting(false)
+    if (error) {
+      setImportParseError(error.message)
+      return
+    }
+    setImportResults(data ?? [])
+    setImportStep('results')
+    await load()
+    await loadLookups()
+  }
+
   return (
     <section>
       <div className="page-head">
@@ -189,12 +330,149 @@ export default function GoodsInventory() {
         </div>
         {canAdd('goods_setup') && (
           <div className="page-actions">
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                setShowImport((v) => !v)
+                resetImport()
+              }}
+            >
+              {showImport ? 'Cancel' : '⬆ Import CSV'}
+            </button>
             <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
               {showForm ? 'Cancel' : '+ Add Goods'}
             </button>
           </div>
         )}
       </div>
+
+      {showImport && (
+        <div className="card" style={{ maxWidth: 820, marginBottom: 20 }}>
+          <h3>Import Goods from CSV</h3>
+
+          {importStep === 'upload' && (
+            <>
+              <p className="card-sub">
+                Upload a CSV to add many items at once. Each row needs at least a <strong>goods_name</strong> — new items
+                also need an <strong>mrp</strong>. If a row matches an item you already have (same barcode, or same name),
+                its details are updated and the quantity is <strong>added</strong> to current stock rather than replacing it.
+              </p>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+                <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+                  Choose CSV file
+                  <input type="file" accept=".csv,text/csv" onChange={handleImportFile} style={{ display: 'none' }} />
+                </label>
+                <button type="button" className="btn btn-ghost" onClick={downloadImportTemplate}>
+                  Download CSV template
+                </button>
+              </div>
+              {importParseError && <div className="login-error" style={{ marginTop: 12 }}>{importParseError}</div>}
+            </>
+          )}
+
+          {importStep === 'preview' && (
+            <>
+              <p className="card-sub">
+                <strong>{importFileName}</strong> · {importPreview.length} row{importPreview.length === 1 ? '' : 's'} ·{' '}
+                {importPreview.filter((r) => r.willCreate).length} new ·{' '}
+                {importPreview.filter((r) => !r.willCreate).length} matching existing items
+                {importPreview.some((r) => r.issue) && (
+                  <> · <span style={{ color: 'var(--red)' }}>{importPreview.filter((r) => r.issue).length} with an issue</span></>
+                )}
+              </p>
+              <div className="table-wrap" style={{ marginTop: 10, maxHeight: 360, overflowY: 'auto' }}>
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Goods</th>
+                      <th>Barcode</th>
+                      <th className="num">MRP</th>
+                      <th className="num">Qty to add</th>
+                      <th>Will</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.map((r, i) => (
+                      <tr key={i}>
+                        <td className="num">{i + 1}</td>
+                        <td className="strong">{r.normalized.goods_name || <em>(blank)</em>}</td>
+                        <td>{r.normalized.barcode || '—'}</td>
+                        <td className="num">{r.normalized.mrp || '—'}</td>
+                        <td className="num">{r.normalized.opening_qty || '0'}</td>
+                        <td>
+                          {r.issue ? (
+                            <span className="chip out">{r.issue}</span>
+                          ) : (
+                            <span className={`chip ${r.willCreate ? 'ok' : 'low'}`}>{r.note}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {importParseError && <div className="login-error" style={{ marginTop: 12 }}>{importParseError}</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                <button className="btn btn-primary" onClick={handleCommitImport} disabled={importing}>
+                  {importing ? 'Importing…' : `Import ${importPreview.length} row${importPreview.length === 1 ? '' : 's'}`}
+                </button>
+                <button className="btn btn-ghost" onClick={resetImport} disabled={importing}>
+                  Choose a different file
+                </button>
+              </div>
+            </>
+          )}
+
+          {importStep === 'results' && (
+            <>
+              <p className="card-sub">
+                {importResults.filter((r) => r.status === 'created').length} created ·{' '}
+                {importResults.filter((r) => r.status === 'updated').length} updated ·{' '}
+                {importResults.filter((r) => r.status === 'error').length} failed
+              </p>
+              <div className="table-wrap" style={{ marginTop: 10, maxHeight: 360, overflowY: 'auto' }}>
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Goods</th>
+                      <th>Result</th>
+                      <th>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importResults.map((r) => (
+                      <tr key={r.row_num}>
+                        <td className="num">{r.row_num}</td>
+                        <td className="strong">{r.item_name || '—'}</td>
+                        <td>
+                          <span className={`chip ${r.status === 'error' ? 'out' : 'ok'}`}>{r.status}</span>
+                        </td>
+                        <td>{r.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setShowImport(false)
+                    resetImport()
+                  }}
+                >
+                  Done
+                </button>
+                <button className="btn btn-ghost" onClick={resetImport}>
+                  Import another file
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <div className="card" style={{ maxWidth: 720, marginBottom: 20 }}>
