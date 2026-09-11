@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
-const rowStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }
-
 function slugify(s) {
   return s
     .toLowerCase()
@@ -115,7 +113,7 @@ export default function SignUp({ onBack }) {
             <input id="orgName" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="e.g. Nayak General Store" required />
           </div>
 
-          <div style={rowStyle}>
+          <div className="login-row">
             <div className="login-field">
               <label htmlFor="city">City (optional)</label>
               <input id="city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Bhubaneswar" />
@@ -146,7 +144,7 @@ export default function SignUp({ onBack }) {
             </span>
           </div>
 
-          <div style={rowStyle}>
+          <div className="login-row">
             <div className="login-field">
               <label htmlFor="ownerFullName">Owner's full name</label>
               <input id="ownerFullName" value={ownerFullName} onChange={(e) => setOwnerFullName(e.target.value)} required />
@@ -170,7 +168,7 @@ export default function SignUp({ onBack }) {
             <input id="contactEmail" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="owner@business.com" />
           </div>
 
-          <div style={rowStyle}>
+          <div className="login-row">
             <div className="login-field">
               <label htmlFor="password">Password</label>
               <input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
