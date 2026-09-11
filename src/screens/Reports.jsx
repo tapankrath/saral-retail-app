@@ -14,7 +14,19 @@ function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
-const TABS = ['Trial Balance', 'Profit & Loss', 'Balance Sheet', 'Account Ledger', 'Day Book', 'Aging']
+const TABS = [
+  'Trial Balance',
+  'Profit & Loss',
+  'Balance Sheet',
+  'Account Ledger',
+  'Day Book',
+  'GST Sales Register',
+  'GST Purchase Register',
+  'HSN Summary',
+  'Aging',
+]
+
+const DATE_RANGE_TABS = ['Account Ledger', 'Day Book', 'GST Sales Register', 'GST Purchase Register', 'HSN Summary']
 
 export default function Reports() {
   const { canView } = useAuth()
@@ -31,6 +43,10 @@ export default function Reports() {
   const [dayBookLoading, setDayBookLoading] = useState(false)
   const [agingRows, setAgingRows] = useState([])
   const [agingLoading, setAgingLoading] = useState(false)
+  const [gstSalesRows, setGstSalesRows] = useState([])
+  const [gstSalesLoading, setGstSalesLoading] = useState(false)
+  const [gstPurchaseRows, setGstPurchaseRows] = useState([])
+  const [gstPurchaseLoading, setGstPurchaseLoading] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -78,6 +94,70 @@ export default function Reports() {
     }
     loadDayBook()
   }, [tab, fromDate, toDate])
+
+  useEffect(() => {
+    if (tab !== 'GST Sales Register' && tab !== 'HSN Summary') return
+    async function loadGstSales() {
+      setGstSalesLoading(true)
+      const { data } = await supabase
+        .from('v_gst_sales_register')
+        .select('*')
+        .gte('voucher_date', fromDate)
+        .lte('voucher_date', toDate)
+        .order('voucher_date')
+        .order('voucher_no')
+      setGstSalesRows(data ?? [])
+      setGstSalesLoading(false)
+    }
+    loadGstSales()
+  }, [tab, fromDate, toDate])
+
+  useEffect(() => {
+    if (tab !== 'GST Purchase Register') return
+    async function loadGstPurchase() {
+      setGstPurchaseLoading(true)
+      const { data } = await supabase
+        .from('v_gst_purchase_register')
+        .select('*')
+        .gte('voucher_date', fromDate)
+        .lte('voucher_date', toDate)
+        .order('voucher_date')
+        .order('voucher_no')
+      setGstPurchaseRows(data ?? [])
+      setGstPurchaseLoading(false)
+    }
+    loadGstPurchase()
+  }, [tab, fromDate, toDate])
+
+  const hsnSummary = useMemo(() => {
+    const map = {}
+    for (const r of gstSalesRows) {
+      const key = `${r.hsn_sac_code ?? '—'}|${r.tax_pct}|${r.uom ?? ''}`
+      if (!map[key]) {
+        map[key] = {
+          hsn_sac_code: r.hsn_sac_code,
+          tax_pct: r.tax_pct,
+          uom: r.uom,
+          qty: 0,
+          taxable_value: 0,
+          cgst_amount: 0,
+          sgst_amount: 0,
+          igst_amount: 0,
+          tax_amount: 0,
+          total: 0,
+        }
+      }
+      const m = map[key]
+      m.qty += Number(r.qty)
+      m.taxable_value += Number(r.taxable_value)
+      m.cgst_amount += Number(r.cgst_amount)
+      m.sgst_amount += Number(r.sgst_amount)
+      m.igst_amount += Number(r.igst_amount)
+      m.tax_amount += Number(r.tax_amount)
+      m.total += Number(r.total)
+    }
+    return Object.values(map).sort((a, b) => (a.hsn_sac_code ?? '').localeCompare(b.hsn_sac_code ?? ''))
+  }, [gstSalesRows])
 
   useEffect(() => {
     if (tab !== 'Aging') return
@@ -171,7 +251,7 @@ export default function Reports() {
         ))}
       </div>
 
-      {(tab === 'Account Ledger' || tab === 'Day Book') && (
+      {DATE_RANGE_TABS.includes(tab) && (
         <div className="toolbar" style={{ gap: 12, flexWrap: 'wrap' }}>
           {tab === 'Account Ledger' && (
             <select className="select-box" value={ledgerAccountId} onChange={(e) => setLedgerAccountId(e.target.value)}>
@@ -421,6 +501,193 @@ export default function Reports() {
                 )}
               </tbody>
             </table>
+          )}
+        </div>
+      ) : tab === 'GST Sales Register' ? (
+        <div className="table-wrap">
+          {gstSalesLoading ? (
+            <p className="empty-note">Loading…</p>
+          ) : (
+            <table className="data report">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Voucher</th>
+                  <th>Party</th>
+                  <th>GSTIN</th>
+                  <th>HSN/SAC</th>
+                  <th style={{ textAlign: 'right' }}>Taxable Value</th>
+                  <th style={{ textAlign: 'right' }}>Rate</th>
+                  <th style={{ textAlign: 'right' }}>CGST</th>
+                  <th style={{ textAlign: 'right' }}>SGST</th>
+                  <th style={{ textAlign: 'right' }}>IGST</th>
+                  <th style={{ textAlign: 'right' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gstSalesRows.map((r, i) => (
+                  <tr key={i}>
+                    <td>{r.voucher_date}</td>
+                    <td className="strong">
+                      {r.voucher_no}
+                      {r.voucher_type === 'Sales Return' && <div className="sub" style={{ fontSize: '.7rem' }}>Return</div>}
+                    </td>
+                    <td>{r.party_name ?? '—'}</td>
+                    <td>{r.party_gstin ?? '— (B2C)'}</td>
+                    <td>{r.hsn_sac_code ?? '—'}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.taxable_value)}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{r.tax_pct}%</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.cgst_amount)}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.sgst_amount)}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.igst_amount)}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.total)}</td>
+                  </tr>
+                ))}
+                {gstSalesRows.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="empty-note">No sales in this date range.</td>
+                  </tr>
+                )}
+                {gstSalesRows.length > 0 && (
+                  <tr>
+                    <td colSpan={5} className="total-row">Total</td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstSalesRows.reduce((s, r) => s + Number(r.taxable_value), 0))}
+                    </td>
+                    <td className="total-row"></td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstSalesRows.reduce((s, r) => s + Number(r.cgst_amount), 0))}
+                    </td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstSalesRows.reduce((s, r) => s + Number(r.sgst_amount), 0))}
+                    </td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstSalesRows.reduce((s, r) => s + Number(r.igst_amount), 0))}
+                    </td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstSalesRows.reduce((s, r) => s + Number(r.total), 0))}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ) : tab === 'GST Purchase Register' ? (
+        <div className="table-wrap">
+          {gstPurchaseLoading ? (
+            <p className="empty-note">Loading…</p>
+          ) : (
+            <table className="data report">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Voucher</th>
+                  <th>Party</th>
+                  <th>GSTIN</th>
+                  <th>HSN/SAC</th>
+                  <th style={{ textAlign: 'right' }}>Taxable Value</th>
+                  <th style={{ textAlign: 'right' }}>Rate</th>
+                  <th style={{ textAlign: 'right' }}>CGST</th>
+                  <th style={{ textAlign: 'right' }}>SGST</th>
+                  <th style={{ textAlign: 'right' }}>IGST</th>
+                  <th style={{ textAlign: 'right' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gstPurchaseRows.map((r, i) => (
+                  <tr key={i}>
+                    <td>{r.voucher_date}</td>
+                    <td className="strong">
+                      {r.voucher_no}
+                      {r.voucher_type === 'Purchase Return' && <div className="sub" style={{ fontSize: '.7rem' }}>Return</div>}
+                    </td>
+                    <td>{r.party_name ?? '—'}</td>
+                    <td>{r.party_gstin ?? '—'}</td>
+                    <td>{r.hsn_sac_code ?? '—'}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.taxable_value)}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{r.tax_pct}%</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.cgst_amount)}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.sgst_amount)}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.igst_amount)}</td>
+                    <td className="num" style={{ textAlign: 'right' }}>{money(r.total)}</td>
+                  </tr>
+                ))}
+                {gstPurchaseRows.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="empty-note">No purchases in this date range.</td>
+                  </tr>
+                )}
+                {gstPurchaseRows.length > 0 && (
+                  <tr>
+                    <td colSpan={5} className="total-row">Total</td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstPurchaseRows.reduce((s, r) => s + Number(r.taxable_value), 0))}
+                    </td>
+                    <td className="total-row"></td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstPurchaseRows.reduce((s, r) => s + Number(r.cgst_amount), 0))}
+                    </td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstPurchaseRows.reduce((s, r) => s + Number(r.sgst_amount), 0))}
+                    </td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstPurchaseRows.reduce((s, r) => s + Number(r.igst_amount), 0))}
+                    </td>
+                    <td className="num total-row" style={{ textAlign: 'right' }}>
+                      {money(gstPurchaseRows.reduce((s, r) => s + Number(r.total), 0))}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ) : tab === 'HSN Summary' ? (
+        <div className="table-wrap">
+          {gstSalesLoading ? (
+            <p className="empty-note">Loading…</p>
+          ) : (
+            <>
+              <p className="card-sub" style={{ padding: '12px 16px 0' }}>
+                Outward supplies (sales) grouped by HSN/SAC and tax rate — matches the HSN summary section of GSTR-1.
+              </p>
+              <table className="data report">
+                <thead>
+                  <tr>
+                    <th>HSN/SAC</th>
+                    <th>UOM</th>
+                    <th style={{ textAlign: 'right' }}>Total Qty</th>
+                    <th style={{ textAlign: 'right' }}>Rate</th>
+                    <th style={{ textAlign: 'right' }}>Taxable Value</th>
+                    <th style={{ textAlign: 'right' }}>CGST</th>
+                    <th style={{ textAlign: 'right' }}>SGST</th>
+                    <th style={{ textAlign: 'right' }}>IGST</th>
+                    <th style={{ textAlign: 'right' }}>Total Tax</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hsnSummary.map((h, i) => (
+                    <tr key={i}>
+                      <td className="strong">{h.hsn_sac_code ?? '—'}</td>
+                      <td>{h.uom ?? '—'}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{h.qty}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{h.tax_pct}%</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{money(h.taxable_value)}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{money(h.cgst_amount)}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{money(h.sgst_amount)}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{money(h.igst_amount)}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{money(h.tax_amount)}</td>
+                    </tr>
+                  ))}
+                  {hsnSummary.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="empty-note">No sales in this date range.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
       ) : (
