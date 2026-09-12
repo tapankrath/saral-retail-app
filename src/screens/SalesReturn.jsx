@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-
-function money(n) {
-  return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import { formatAmount, currencySymbol } from '../lib/money'
 
 export default function SalesReturn() {
   const { profile, canAdd } = useAuth()
+  const country = profile?.organizations?.country || 'IN'
+  const sym = currencySymbol(country)
+  function money(n) {
+    return formatAmount(n, country)
+  }
   const [accounts, setAccounts] = useState([])
   const [goods, setGoods] = useState([])
   const [accountId, setAccountId] = useState('')
@@ -146,7 +148,7 @@ export default function SalesReturn() {
                   {goodsMatches.map((g) => (
                     <tr key={g.lot_id} onClick={() => addLine(g)} style={{ cursor: 'pointer' }}>
                       <td className="strong">{g.goods_name}</td>
-                      <td className="num">MRP ₹{money(g.mrp)}</td>
+                      <td className="num">MRP {sym}{money(g.mrp)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -165,7 +167,7 @@ export default function SalesReturn() {
                     <td className="num"><input style={{ width: 80, font: 'inherit' }} type="number" value={l.rate} onChange={(e) => updateLine(idx, 'rate', e.target.value)} /></td>
                     <td className="num"><input style={{ width: 60, font: 'inherit' }} type="number" value={l.qty} onChange={(e) => updateLine(idx, 'qty', e.target.value)} /></td>
                     <td className="num">{l.tax_pct}%</td>
-                    <td className="num">₹{money(l.total)}</td>
+                    <td className="num">{sym}{money(l.total)}</td>
                     <td><button className="icon-btn" onClick={() => removeLine(idx)} aria-label="Remove">✕</button></td>
                   </tr>
                 ))}
@@ -179,9 +181,9 @@ export default function SalesReturn() {
 
         <div className="card">
           <h3>Return summary</h3>
-          <div className="summary-row"><span>Goods value</span><span className="tnum">₹{money(totalGoods)}</span></div>
-          <div className="summary-row"><span>Tax reversed</span><span className="tnum">₹{money(totalTax)}</span></div>
-          <div className="summary-row total"><span>Total credit</span><span className="val tnum">₹{money(grandTotal)}</span></div>
+          <div className="summary-row"><span>Goods value</span><span className="tnum">{sym}{money(totalGoods)}</span></div>
+          <div className="summary-row"><span>Tax reversed</span><span className="tnum">{sym}{money(totalTax)}</span></div>
+          <div className="summary-row total"><span>Total credit</span><span className="val tnum">{sym}{money(grandTotal)}</span></div>
           <div className="field">
             <label>Cash refunded now (rest reduces their balance)</label>
             <input type="number" value={cashRefund} onChange={(e) => setCashRefund(e.target.value)} placeholder="0" />

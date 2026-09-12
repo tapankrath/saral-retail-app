@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-
-function money(n) {
-  return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import { formatAmount, currencySymbol } from '../lib/money'
 
 function startOfMonth() {
   const d = new Date()
@@ -14,22 +11,30 @@ function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
-const TABS = [
-  'Trial Balance',
-  'Profit & Loss',
-  'Balance Sheet',
-  'Account Ledger',
-  'Day Book',
-  'GST Sales Register',
-  'GST Purchase Register',
-  'HSN Summary',
-  'Aging',
-]
-
-const DATE_RANGE_TABS = ['Account Ledger', 'Day Book', 'GST Sales Register', 'GST Purchase Register', 'HSN Summary']
-
 export default function Reports() {
-  const { canView } = useAuth()
+  const { canView, profile } = useAuth()
+  const country = profile?.organizations?.country || 'IN'
+  const isUS = country === 'US'
+  const sym = currencySymbol(country)
+  function money(n) {
+    return formatAmount(n, country)
+  }
+
+  const TABS = [
+    'Trial Balance',
+    'Profit & Loss',
+    'Balance Sheet',
+    'Account Ledger',
+    'Day Book',
+    ...(isUS ? ['Sales Tax Liability'] : ['GST Sales Register', 'GST Purchase Register', 'HSN Summary']),
+    'Aging',
+  ]
+  const DATE_RANGE_TABS = [
+    'Account Ledger',
+    'Day Book',
+    ...(isUS ? ['Sales Tax Liability'] : ['GST Sales Register', 'GST Purchase Register', 'HSN Summary']),
+  ]
+
   const [tab, setTab] = useState('Trial Balance')
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -47,6 +52,8 @@ export default function Reports() {
   const [gstSalesLoading, setGstSalesLoading] = useState(false)
   const [gstPurchaseRows, setGstPurchaseRows] = useState([])
   const [gstPurchaseLoading, setGstPurchaseLoading] = useState(false)
+  const [usTaxRows, setUsTaxRows] = useState([])
+  const [usTaxLoading, setUsTaxLoading] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -128,6 +135,38 @@ export default function Reports() {
     }
     loadGstPurchase()
   }, [tab, fromDate, toDate])
+
+  useEffect(() => {
+    if (tab !== 'Sales Tax Liability') return
+    async function loadUsTax() {
+      setUsTaxLoading(true)
+      const { data } = await supabase
+        .from('v_us_sales_tax_register')
+        .select('*')
+        .gte('voucher_date', fromDate)
+        .lte('voucher_date', toDate)
+        .order('voucher_date')
+        .order('voucher_no')
+      setUsTaxRows(data ?? [])
+      setUsTaxLoading(false)
+    }
+    loadUsTax()
+  }, [tab, fromDate, toDate])
+
+  const usTaxByState = useMemo(() => {
+    const map = {}
+    for (const r of usTaxRows) {
+      const key = r.state_code ?? '—'
+      if (!map[key]) {
+        map[key] = { state_code: r.state_code, taxable_value: 0, tax_amount: 0, total: 0 }
+      }
+      const m = map[key]
+      m.taxable_value += Number(r.taxable_value)
+      m.tax_amount += Number(r.tax_amount)
+      m.total += Number(r.total)
+    }
+    return Object.values(map).sort((a, b) => (a.state_code ?? '').localeCompare(b.state_code ?? ''))
+  }, [usTaxRows])
 
   const hsnSummary = useMemo(() => {
     const map = {}
@@ -362,12 +401,12 @@ export default function Reports() {
             {assetRows.map((r) => (
               <div className="list-row" key={r.account_id}>
                 <div className="name">{r.account_name}</div>
-                <span className="tnum">₹{money(r.closing)}</span>
+                <span className="tnum">{sym}{money(r.closing)}</span>
               </div>
             ))}
             <div className="summary-row total">
               <span>Total Assets</span>
-              <span className="val tnum">₹{money(totalAssets)}</span>
+              <span className="val tnum">{sym}{money(totalAssets)}</span>
             </div>
           </div>
           <div className="card">
@@ -375,22 +414,22 @@ export default function Reports() {
             {liabilityRows.map((r) => (
               <div className="list-row" key={r.account_id}>
                 <div className="name">{r.account_name}</div>
-                <span className="tnum">₹{money(-r.closing)}</span>
+                <span className="tnum">{sym}{money(-r.closing)}</span>
               </div>
             ))}
             {capitalRows.map((r) => (
               <div className="list-row" key={r.account_id}>
                 <div className="name">{r.account_name}</div>
-                <span className="tnum">₹{money(-r.closing)}</span>
+                <span className="tnum">{sym}{money(-r.closing)}</span>
               </div>
             ))}
             <div className="list-row">
               <div className="name">Current Year Earnings</div>
-              <span className="tnum">₹{money(netProfit)}</span>
+              <span className="tnum">{sym}{money(netProfit)}</span>
             </div>
             <div className="summary-row total">
               <span>Total Liabilities &amp; Capital</span>
-              <span className="val tnum">₹{money(totalLiabilities + totalCapital + netProfit)}</span>
+              <span className="val tnum">{sym}{money(totalLiabilities + totalCapital + netProfit)}</span>
             </div>
           </div>
         </div>
@@ -683,6 +722,58 @@ export default function Reports() {
                   {hsnSummary.length === 0 && (
                     <tr>
                       <td colSpan={9} className="empty-note">No sales in this date range.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      ) : tab === 'Sales Tax Liability' ? (
+        <div className="table-wrap">
+          {usTaxLoading ? (
+            <p className="empty-note">Loading…</p>
+          ) : (
+            <>
+              <p className="card-sub" style={{ padding: '12px 16px 0' }}>
+                Taxable sales and tax collected by state for this date range — a starting point for filing each state's
+                sales tax return. Rates come from the tax rates set up under Organization &amp; Branch Setup.
+              </p>
+              <table className="data report">
+                <thead>
+                  <tr>
+                    <th>State</th>
+                    <th style={{ textAlign: 'right' }}>Taxable Sales</th>
+                    <th style={{ textAlign: 'right' }}>Tax Collected</th>
+                    <th style={{ textAlign: 'right' }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usTaxByState.map((s, i) => (
+                    <tr key={i}>
+                      <td className="strong">{s.state_code ?? 'No state / exempt'}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{sym}{money(s.taxable_value)}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{sym}{money(s.tax_amount)}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>{sym}{money(s.total)}</td>
+                    </tr>
+                  ))}
+                  {usTaxByState.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="empty-note">No sales in this date range.</td>
+                    </tr>
+                  )}
+                  {usTaxByState.length > 0 && (
+                    <tr>
+                      <td className="total-row">Total</td>
+                      <td className="num total-row" style={{ textAlign: 'right' }}>
+                        {sym}{money(usTaxByState.reduce((s, r) => s + r.taxable_value, 0))}
+                      </td>
+                      <td className="num total-row" style={{ textAlign: 'right' }}>
+                        {sym}{money(usTaxByState.reduce((s, r) => s + r.tax_amount, 0))}
+                      </td>
+                      <td className="num total-row" style={{ textAlign: 'right' }}>
+                        {sym}{money(usTaxByState.reduce((s, r) => s + r.total, 0))}
+                      </td>
                     </tr>
                   )}
                 </tbody>

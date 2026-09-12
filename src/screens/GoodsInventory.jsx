@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import BarcodeScanner from '../components/BarcodeScanner'
+import { currencySymbol } from '../lib/money'
 
 const NEW_CATEGORY = '__new_category__'
 const NEW_GROUP = '__new_group__'
@@ -70,6 +71,8 @@ const emptyForm = {
 
 export default function GoodsInventory() {
   const { profile, canAdd, canEdit } = useAuth()
+  const country = profile?.organizations?.country || 'IN'
+  const sym = currencySymbol(country)
   const [rows, setRows] = useState([])
   const [taxTypes, setTaxTypes] = useState([])
   const [categories, setCategories] = useState([])
@@ -677,7 +680,7 @@ export default function GoodsInventory() {
                       {qty} {g.uom}
                     </td>
                     <td className="num">{reorder ?? '—'}</td>
-                    <td className="num">₹{Number(g.mrp).toFixed(2)}</td>
+                    <td className="num">{sym}{Number(g.mrp).toFixed(2)}</td>
                     <td>
                       {g.batch_no ?? '—'}
                       {g.expiry_date ? ` · exp ${g.expiry_date}` : ''}

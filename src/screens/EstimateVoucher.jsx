@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-
-function money(n) {
-  return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import { formatAmount, currencySymbol } from '../lib/money'
 
 export default function EstimateVoucher() {
   const { profile, canAdd } = useAuth()
+  const country = profile?.organizations?.country || 'IN'
+  const sym = currencySymbol(country)
+  function money(n) {
+    return formatAmount(n, country)
+  }
   const [accounts, setAccounts] = useState([])
   const [goods, setGoods] = useState([])
   const [accountId, setAccountId] = useState('')
@@ -157,7 +159,7 @@ export default function EstimateVoucher() {
                   {goodsMatches.map((g) => (
                     <tr key={g.lot_id} onClick={() => addLine(g)} style={{ cursor: 'pointer' }}>
                       <td className="strong">{g.goods_name}</td>
-                      <td className="num">₹{money(g.mrp)}</td>
+                      <td className="num">{sym}{money(g.mrp)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -176,7 +178,7 @@ export default function EstimateVoucher() {
                     <td className="num"><input style={{ width: 80, font: 'inherit' }} type="number" value={l.rate} onChange={(e) => updateLine(idx, 'rate', e.target.value)} /></td>
                     <td className="num"><input style={{ width: 60, font: 'inherit' }} type="number" value={l.qty} onChange={(e) => updateLine(idx, 'qty', e.target.value)} /></td>
                     <td className="num">{l.tax_pct}%</td>
-                    <td className="num">₹{money(l.total)}</td>
+                    <td className="num">{sym}{money(l.total)}</td>
                     <td><button className="icon-btn" onClick={() => removeLine(idx)} aria-label="Remove">✕</button></td>
                   </tr>
                 ))}
@@ -190,9 +192,9 @@ export default function EstimateVoucher() {
 
         <div className="card">
           <h3>Estimate summary</h3>
-          <div className="summary-row"><span>Goods value</span><span className="tnum">₹{money(totalGoods)}</span></div>
-          <div className="summary-row"><span>Tax</span><span className="tnum">₹{money(totalTax)}</span></div>
-          <div className="summary-row total"><span>Total</span><span className="val tnum">₹{money(grandTotal)}</span></div>
+          <div className="summary-row"><span>Goods value</span><span className="tnum">{sym}{money(totalGoods)}</span></div>
+          <div className="summary-row"><span>Tax</span><span className="tnum">{sym}{money(totalTax)}</span></div>
+          <div className="summary-row total"><span>Total</span><span className="val tnum">{sym}{money(grandTotal)}</span></div>
           <button className="btn btn-primary btn-block" style={{ marginTop: 16 }} onClick={handleSubmit} disabled={submitting}>
             {submitting ? 'Saving…' : 'Save Estimate'}
           </button>
@@ -211,7 +213,7 @@ export default function EstimateVoucher() {
                 <td className="strong">{r.voucher_no}</td>
                 <td>{r.voucher_date}</td>
                 <td>{r.accounts?.name ?? r.customer_name ?? '—'}</td>
-                <td className="num">₹{money(r.total)}</td>
+                <td className="num">{sym}{money(r.total)}</td>
               </tr>
             ))}
             {recent.length === 0 && (

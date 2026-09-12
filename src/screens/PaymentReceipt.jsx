@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-
-function money(n) {
-  return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import { formatAmount, currencySymbol } from '../lib/money'
 
 export default function PaymentReceipt() {
   const { profile, canAdd } = useAuth()
+  const country = profile?.organizations?.country || 'IN'
+  const sym = currencySymbol(country)
+  function money(n) {
+    return formatAmount(n, country)
+  }
   const [mode, setMode] = useState('payment') // or 'receipt'
   const [cashBankAccounts, setCashBankAccounts] = useState([])
   const [otherAccounts, setOtherAccounts] = useState([])
@@ -159,7 +161,7 @@ export default function PaymentReceipt() {
           <input value={narration} onChange={(e) => setNarration(e.target.value)} />
         </div>
         <button className="btn btn-primary btn-block" style={{ marginTop: 16 }} onClick={handleSubmit} disabled={submitting}>
-          {submitting ? 'Posting…' : `Post ₹${money(amount || 0)}`}
+          {submitting ? 'Posting…' : `Post ${sym}${money(amount || 0)}`}
         </button>
       </div>
     </section>

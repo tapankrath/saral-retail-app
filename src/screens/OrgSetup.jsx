@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
+const emptyNewTax = { name: '', tax_percent: '', state_code: '' }
+
 const emptyOrg = {
   name: '', contact_person: '', designation: '', address: '', city: '', state: '',
-  pincode: '', email: '', mobile: '', gstin_state_code: '',
+  pincode: '', email: '', mobile: '', gstin_state_code: '', country: 'IN', ein: '', sales_tax_permit_no: '',
 }
 const emptyBranch = { name: '', voucher_prefix: '', gstin: '', address_lines: '', logo_url: '', signature_url: '' }
 
@@ -22,6 +24,15 @@ export default function OrgSetup() {
   const [branchMsg, setBranchMsg] = useState(null)
   const [error, setError] = useState(null)
 
+  const [taxTypes, setTaxTypes] = useState([])
+  const [taxLoading, setTaxLoading] = useState(true)
+  const [taxError, setTaxError] = useState(null)
+  const [newTax, setNewTax] = useState(emptyNewTax)
+  const [addingTax, setAddingTax] = useState(false)
+  const [editingTaxId, setEditingTaxId] = useState(null)
+  const [editTax, setEditTax] = useState(emptyNewTax)
+  const [savingTaxId, setSavingTaxId] = useState(null)
+
   useEffect(() => {
     async function load() {
       setLoading(true)
@@ -34,6 +45,86 @@ export default function OrgSetup() {
     if (profile) load()
   }, [profile])
 
+  async function loadTaxTypes() {
+    setTaxLoading(true)
+    const { data, error } = await supabase.from('tax_types').select('id, name, tax_percent, state_code').order('tax_percent')
+    if (error) setTaxError(error.message)
+    setTaxTypes(data ?? [])
+    setTaxLoading(false)
+  }
+
+  useEffect(() => {
+    if (profile) loadTaxTypes()
+  }, [profile])
+
+  async function handleAddTax() {
+    setTaxError(null)
+    if (!newTax.name.trim()) {
+      setTaxError('Name is required.')
+      return
+    }
+    if (newTax.tax_percent === '' || Number(newTax.tax_percent) < 0) {
+      setTaxError('Enter a tax percent of zero or greater.')
+      return
+    }
+    setAddingTax(true)
+    const { error } = await supabase.rpc('create_tax_type', {
+      p_name: newTax.name.trim(),
+      p_tax_percent: Number(newTax.tax_percent),
+      p_state_code: newTax.state_code ? newTax.state_code.trim().toUpperCase() : null,
+    })
+    setAddingTax(false)
+    if (error) {
+      setTaxError(error.message)
+      return
+    }
+    setNewTax(emptyNewTax)
+    await loadTaxTypes()
+  }
+
+  function startEditTax(t) {
+    setEditingTaxId(t.id)
+    setEditTax({ name: t.name, tax_percent: String(t.tax_percent), state_code: t.state_code ?? '' })
+    setTaxError(null)
+  }
+
+  async function handleSaveTax(id) {
+    setTaxError(null)
+    if (!editTax.name.trim()) {
+      setTaxError('Name is required.')
+      return
+    }
+    if (editTax.tax_percent === '' || Number(editTax.tax_percent) < 0) {
+      setTaxError('Enter a tax percent of zero or greater.')
+      return
+    }
+    setSavingTaxId(id)
+    const { error } = await supabase.rpc('update_tax_type', {
+      p_id: id,
+      p_name: editTax.name.trim(),
+      p_tax_percent: Number(editTax.tax_percent),
+      p_state_code: editTax.state_code ? editTax.state_code.trim().toUpperCase() : null,
+    })
+    setSavingTaxId(null)
+    if (error) {
+      setTaxError(error.message)
+      return
+    }
+    setEditingTaxId(null)
+    await loadTaxTypes()
+  }
+
+  async function handleDeleteTax(t) {
+    if (!window.confirm(`Delete "${t.name}"? This can't be undone.`)) return
+    setTaxError(null)
+    const { error } = await supabase.rpc('delete_tax_type', { p_id: t.id })
+    if (error) {
+      setTaxError(error.message)
+      return
+    }
+    await loadTaxTypes()
+  }
+
   async function saveOrg() {
     setError(null)
     setOrgMsg(null)
@@ -45,6 +136,7 @@ export default function OrgSetup() {
         address: org.address || null, city: org.city || null, state: org.state || null,
         pincode: org.pincode || null, email: org.email || null, mobile: org.mobile || null,
         gstin_state_code: org.gstin_state_code || null,
+        country: org.country || 'IN', ein: org.ein || null, sales_tax_permit_no: org.sales_tax_permit_no || null,
       })
       .eq('id', profile.organization_id)
     setSavingOrg(false)
@@ -90,6 +182,7 @@ export default function OrgSetup() {
       <div className="tab-row">
         {canOrg && <button className={`tab${tab === 'org' ? ' active' : ''}`} onClick={() => setTab('org')}>Organization</button>}
         {canBranch && <button className={`tab${tab === 'branch' ? ' active' : ''}`} onClick={() => setTab('branch')}>Branch</button>}
+        {canOrg && <button className={`tab${tab === 'tax' ? ' active' : ''}`} onClick={() => setTab('tax')}>Tax Rates</button>}
       </div>
 
       {error && <div className="login-error">{error}</div>}
@@ -102,6 +195,25 @@ export default function OrgSetup() {
             <label>Business name</label>
             <input value={org.name} onChange={(e) => setOrg((p) => ({ ...p, name: e.target.value }))} disabled={!canEdit('system_setup')} />
           </div>
+          <div className="field-row">
+            <div className="field">
+              <label>Country</label>
+              <select
+                value={org.country || 'IN'}
+                onChange={(e) => setOrg((p) => ({ ...p, country: e.target.value }))}
+                disabled={!canEdit('system_setup')}
+              >
+                <option value="IN">India</option>
+                <option value="US">United States</option>
+              </select>
+            </div>
+          </div>
+          {org.country === 'US' && (
+            <p className="card-sub" style={{ marginTop: -6, marginBottom: 12 }}>
+              United States is set up for internal testing — new sign-ups always start on India. Currency, tax fields
+              and reports below switch to US conventions for this business.
+            </p>
+          )}
           <div className="field-row">
             <div className="field">
               <label>Contact person</label>
@@ -139,15 +251,143 @@ export default function OrgSetup() {
               <label>Mobile</label>
               <input value={org.mobile ?? ''} onChange={(e) => setOrg((p) => ({ ...p, mobile: e.target.value }))} disabled={!canEdit('system_setup')} />
             </div>
-            <div className="field">
-              <label>GSTIN state code</label>
-              <input value={org.gstin_state_code ?? ''} onChange={(e) => setOrg((p) => ({ ...p, gstin_state_code: e.target.value }))} placeholder="e.g. 21" maxLength={2} disabled={!canEdit('system_setup')} />
-            </div>
+            {org.country === 'US' ? (
+              <>
+                <div className="field">
+                  <label>EIN</label>
+                  <input value={org.ein ?? ''} onChange={(e) => setOrg((p) => ({ ...p, ein: e.target.value }))} placeholder="e.g. 12-3456789" disabled={!canEdit('system_setup')} />
+                </div>
+                <div className="field">
+                  <label>Sales tax permit / resale cert. no.</label>
+                  <input
+                    value={org.sales_tax_permit_no ?? ''}
+                    onChange={(e) => setOrg((p) => ({ ...p, sales_tax_permit_no: e.target.value }))}
+                    disabled={!canEdit('system_setup')}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="field">
+                <label>GSTIN state code</label>
+                <input value={org.gstin_state_code ?? ''} onChange={(e) => setOrg((p) => ({ ...p, gstin_state_code: e.target.value }))} placeholder="e.g. 21" maxLength={2} disabled={!canEdit('system_setup')} />
+              </div>
+            )}
           </div>
           {canEdit('system_setup') && (
             <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={saveOrg} disabled={savingOrg}>
               {savingOrg ? 'Saving…' : 'Save Organization'}
             </button>
+          )}
+        </div>
+      ) : tab === 'tax' ? (
+        <div className="card" style={{ maxWidth: 720 }}>
+          <p className="card-sub" style={{ marginTop: 0 }}>
+            Rates goods are taxed at. {org.country === 'US'
+              ? 'Set up one per state you collect sales tax in (e.g. "California Sales Tax", 7.25%, state CA).'
+              : 'These are your GST rates — set at sign-up, editable here if they ever change.'}
+          </p>
+          {taxError && <div className="login-error">{taxError}</div>}
+          {taxLoading ? (
+            <p className="empty-note">Loading…</p>
+          ) : (
+            <div className="table-wrap" style={{ marginBottom: 16 }}>
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th style={{ textAlign: 'right' }}>Tax %</th>
+                    {org.country === 'US' && <th>State</th>}
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {taxTypes.map((t) => (
+                    <tr key={t.id}>
+                      {editingTaxId === t.id ? (
+                        <>
+                          <td>
+                            <input
+                              style={{ width: '100%', font: 'inherit' }}
+                              value={editTax.name}
+                              onChange={(e) => setEditTax((p) => ({ ...p, name: e.target.value }))}
+                            />
+                          </td>
+                          <td className="num" style={{ textAlign: 'right' }}>
+                            <input
+                              type="number"
+                              style={{ width: 80, font: 'inherit', textAlign: 'right' }}
+                              value={editTax.tax_percent}
+                              onChange={(e) => setEditTax((p) => ({ ...p, tax_percent: e.target.value }))}
+                            />
+                          </td>
+                          {org.country === 'US' && (
+                            <td>
+                              <input
+                                style={{ width: 60, font: 'inherit' }}
+                                value={editTax.state_code}
+                                onChange={(e) => setEditTax((p) => ({ ...p, state_code: e.target.value }))}
+                                placeholder="CA"
+                                maxLength={2}
+                              />
+                            </td>
+                          )}
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <button className="btn btn-primary" style={{ padding: '5px 10px' }} onClick={() => handleSaveTax(t.id)} disabled={savingTaxId === t.id}>
+                              {savingTaxId === t.id ? 'Saving…' : 'Save'}
+                            </button>{' '}
+                            <button className="btn btn-ghost" style={{ padding: '5px 10px' }} onClick={() => setEditingTaxId(null)}>Cancel</button>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="strong">{t.name}</td>
+                          <td className="num" style={{ textAlign: 'right' }}>{t.tax_percent}%</td>
+                          {org.country === 'US' && <td>{t.state_code ?? '—'}</td>}
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {canEdit('system_setup') && (
+                              <>
+                                <button className="btn btn-ghost" style={{ padding: '5px 10px' }} onClick={() => startEditTax(t)}>Edit</button>{' '}
+                                <button className="icon-btn" onClick={() => handleDeleteTax(t)} aria-label="Delete">✕</button>
+                              </>
+                            )}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                  {taxTypes.length === 0 && (
+                    <tr>
+                      <td colSpan={org.country === 'US' ? 4 : 3} className="empty-note">No tax rates yet — add one below.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {canEdit('system_setup') && (
+            <div className="field-row" style={{ alignItems: 'flex-end' }}>
+              <div className="field" style={{ marginTop: 0 }}>
+                <label>Name</label>
+                <input
+                  value={newTax.name}
+                  onChange={(e) => setNewTax((p) => ({ ...p, name: e.target.value }))}
+                  placeholder={org.country === 'US' ? 'e.g. California Sales Tax' : 'e.g. GST 5%'}
+                />
+              </div>
+              <div className="field" style={{ marginTop: 0 }}>
+                <label>Tax %</label>
+                <input type="number" value={newTax.tax_percent} onChange={(e) => setNewTax((p) => ({ ...p, tax_percent: e.target.value }))} placeholder="e.g. 7.25" />
+              </div>
+              {org.country === 'US' && (
+                <div className="field" style={{ marginTop: 0 }}>
+                  <label>State</label>
+                  <input value={newTax.state_code} onChange={(e) => setNewTax((p) => ({ ...p, state_code: e.target.value }))} placeholder="CA" maxLength={2} />
+                </div>
+              )}
+              <button className="btn btn-primary" onClick={handleAddTax} disabled={addingTax}>
+                {addingTax ? 'Adding…' : '+ Add Tax Rate'}
+              </button>
+            </div>
           )}
         </div>
       ) : (

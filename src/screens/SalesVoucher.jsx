@@ -2,15 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import BarcodeScanner from '../components/BarcodeScanner'
-
-function money(n) {
-  return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import { formatAmount, currencySymbol } from '../lib/money'
 
 const NEW_CUSTOMER = '__new__'
 
 export default function SalesVoucher() {
   const { profile, canAdd } = useAuth()
+  const country = profile?.organizations?.country || 'IN'
+  const sym = currencySymbol(country)
+  function money(n) {
+    return formatAmount(n, country)
+  }
   const [accounts, setAccounts] = useState([])
   const [goods, setGoods] = useState([])
   const [accountId, setAccountId] = useState('')
@@ -277,7 +279,7 @@ export default function SalesVoucher() {
                   {goodsMatches.map((g) => (
                     <tr key={g.lot_id} onClick={() => addLine(g)} style={{ cursor: 'pointer' }}>
                       <td className="strong">{g.goods_name}</td>
-                      <td className="num">₹{money(g.mrp)}</td>
+                      <td className="num">{sym}{money(g.mrp)}</td>
                       <td className="num">
                         {g.current_qty} {g.uom} in stock
                       </td>
@@ -321,7 +323,7 @@ export default function SalesVoucher() {
                       />
                     </td>
                     <td className="num">{l.tax_pct}%</td>
-                    <td className="num">₹{money(l.total)}</td>
+                    <td className="num">{sym}{money(l.total)}</td>
                     <td>
                       <button className="icon-btn" onClick={() => removeLine(idx)} aria-label="Remove">
                         ✕
@@ -345,15 +347,15 @@ export default function SalesVoucher() {
           <h3>Bill summary</h3>
           <div className="summary-row">
             <span>Goods value</span>
-            <span className="tnum">₹{money(totalGoods)}</span>
+            <span className="tnum">{sym}{money(totalGoods)}</span>
           </div>
           <div className="summary-row">
             <span>Tax</span>
-            <span className="tnum">₹{money(totalTax)}</span>
+            <span className="tnum">{sym}{money(totalTax)}</span>
           </div>
           <div className="summary-row total">
             <span>Total due</span>
-            <span className="val tnum">₹{money(grandTotal)}</span>
+            <span className="val tnum">{sym}{money(grandTotal)}</span>
           </div>
           <p style={{ fontSize: '.72rem', color: 'var(--muted)', marginTop: 10 }}>Paid by</p>
           <div className="pay-toggle">

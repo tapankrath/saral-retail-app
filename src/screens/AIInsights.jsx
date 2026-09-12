@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-
-function money(n) {
-  return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import { formatMoney } from '../lib/money'
 
 const TABS = ['Reorder & Stock Health', 'Sales Insights', 'Customer Risk', 'Anomalies']
 
@@ -30,7 +27,11 @@ const VOUCHER_LABEL = {
 }
 
 export default function AIInsights() {
-  const { canView } = useAuth()
+  const { canView, profile } = useAuth()
+  const country = profile?.organizations?.country || 'IN'
+  function money(n) {
+    return formatMoney(n, country)
+  }
   const [tab, setTab] = useState(TABS[0])
   const [loading, setLoading] = useState(true)
   const [reorder, setReorder] = useState([])

@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-
-function formatMoney(n) {
-  return '₹' + Number(n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import { formatMoney as fmtMoney } from '../lib/money'
 
 export default function Dashboard() {
   const { profile } = useAuth()
+  const country = profile?.organizations?.country || 'IN'
+  function formatMoney(n) {
+    return fmtMoney(n, country)
+  }
   const [loading, setLoading] = useState(true)
   const [todaySales, setTodaySales] = useState(0)
   const [lowStock, setLowStock] = useState([])
